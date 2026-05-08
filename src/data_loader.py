@@ -2,22 +2,29 @@
 Chargement et découpage en fenêtres des signaux CWRU.
 
 Pipeline :  fichier .mat  →  signal 1D  →  fenêtres glissantes  →  DataFrame
+           → split (normal/défauts)  →  normalisation  →  sauvegarde parquet
 """
 from __future__ import annotations
 
 from pathlib import Path
 
+import joblib
 import numpy as np
 import pandas as pd
 import scipy.io
+from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
 from src.config import (
+    DATA_PROCESSED,
     DATA_RAW,
     DEV_MODE,
     DEV_SUBSET_SIZE,
+    MODELS_DIR,
     OVERLAP,
+    RANDOM_SEED,
     SAMPLING_RATE,
+    TRAIN_RATIO,
     WINDOW_SIZE,
 )
 
@@ -214,12 +221,174 @@ def _select_dev_subset(mat_files: list[Path], n: int) -> list[Path]:
 
 
 # ---------------------------------------------------------------------------
-# Point d'entrée direct
+# Fonction 5 : split pour la détection d'anomalies non supervisée
+# ---------------------------------------------------------------------------
+
+
+def split_anomaly_detection(
+    df: pd.DataFrame,
+    train_ratio: float = TRAIN_RATIO,
+    seed: int = RANDOM_SEED,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Split spécifique à la détection d'anomalies non supervisée.
+
+    Train : train_ratio des fenêtres normales uniquement (l'autoencoder
+    apprend exclusivement la distribution saine).
+    Test  : les normales restantes + 100% des défauts, mélangés.
+    """
+    df_normal = df[df["label"] == "normal"].copy()
+    df_faults = df[df["label"] != "normal"].copy()
+
+    # Mélange reproductible des normales
+    df_normal = df_normal.sample(frac=1, random_state=seed).reset_index(drop=True)
+
+    n_train = int(len(df_normal) * train_ratio)
+    df_normal_train = df_normal.iloc[:n_train]
+    df_normal_test  = df_normal.iloc[n_train:]
+
+    df_train = df_normal_train.reset_index(drop=True)
+
+    # Test = normales restantes + tous les défauts, mélangés
+    df_test = (
+        pd.concat([df_normal_test, df_faults], ignore_index=True)
+        .sample(frac=1, random_state=seed)
+        .reset_index(drop=True)
+    )
+
+    # Garde-fou critique : le train ne doit JAMAIS contenir de défauts
+    assert (df_train["label"] == "normal").all(), (
+        "BUG: df_train contient des défauts !"
+    )
+
+    # Récap
+    print(f"\n[Split] Train : {len(df_train):,} fenêtres normales")
+    test_counts = df_test["label"].value_counts()
+    details = "  ".join(f"{lbl}={cnt:,}" for lbl, cnt in test_counts.items())
+    print(f"[Split] Test  : {len(df_test):,} fenêtres total  ({details})")
+
+    return df_train, df_test
+
+
+# ---------------------------------------------------------------------------
+# Fonction 6 : normalisation MinMaxScaler (anti data-leakage)
+# ---------------------------------------------------------------------------
+
+
+def normalize(
+    df: pd.DataFrame,
+    scaler: MinMaxScaler | None = None,
+) -> tuple[pd.DataFrame, MinMaxScaler]:
+    """Normalise les colonnes window_* avec MinMaxScaler dans [0, 1].
+
+    Si scaler est None : fit + transform (cas train).
+    Sinon : transform uniquement (cas test — évite le data leakage).
+    """
+    colonnes_signal = [col for col in df.columns if col.startswith("window_")]
+    colonnes_meta   = [col for col in df.columns if not col.startswith("window_")]
+
+    if scaler is None:
+        scaler = MinMaxScaler(feature_range=(0, 1))
+        valeurs_norm = scaler.fit_transform(df[colonnes_signal])
+    else:
+        valeurs_norm = scaler.transform(df[colonnes_signal])
+
+    df_norm = pd.DataFrame(valeurs_norm, columns=colonnes_signal, index=df.index)
+    # Réattache les colonnes méta (label, source_file) sans les toucher
+    df_norm[colonnes_meta] = df[colonnes_meta].values
+
+    return df_norm, scaler
+
+
+# ---------------------------------------------------------------------------
+# Fonction 7 : sauvegarde du pipeline préparé
+# ---------------------------------------------------------------------------
+
+
+def save_processed(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    scaler: MinMaxScaler,
+    output_dir: Path = DATA_PROCESSED,
+    models_dir: Path = MODELS_DIR,
+) -> None:
+    """Sauvegarde df_train, df_test (parquet) et scaler (joblib) sur disque."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    models_dir.mkdir(parents=True, exist_ok=True)
+
+    chemin_train  = output_dir  / "df_train.parquet"
+    chemin_test   = output_dir  / "df_test.parquet"
+    chemin_scaler = models_dir  / "scaler.pkl"
+
+    df_train.to_parquet(chemin_train,  index=False)
+    df_test.to_parquet(chemin_test,   index=False)
+    joblib.dump(scaler, chemin_scaler)
+
+    print("\n[Sauvegarde]")
+    for chemin in (chemin_train, chemin_test, chemin_scaler):
+        taille_mb = chemin.stat().st_size / (1024 ** 2)
+        print(f"  {chemin.resolve()}  ({taille_mb:.2f} MB)")
+
+
+# ---------------------------------------------------------------------------
+# Fonction 8 : rechargement du pipeline (pour P3 — entraînement)
+# ---------------------------------------------------------------------------
+
+
+def load_processed(
+    processed_dir: Path = DATA_PROCESSED,
+    models_dir: Path = MODELS_DIR,
+) -> tuple[pd.DataFrame, pd.DataFrame, MinMaxScaler]:
+    """Recharge df_train, df_test et scaler depuis disque.
+
+    Lève FileNotFoundError si un fichier est absent — relancer
+    `python -m src.data_loader` pour régénérer les fichiers.
+    """
+    chemins = {
+        "df_train" : processed_dir / "df_train.parquet",
+        "df_test"  : processed_dir / "df_test.parquet",
+        "scaler"   : models_dir    / "scaler.pkl",
+    }
+
+    for nom, chemin in chemins.items():
+        if not chemin.exists():
+            raise FileNotFoundError(
+                f"Fichier manquant : {chemin}\n"
+                f"Relancez le pipeline : python -m src.data_loader"
+            )
+
+    df_train = pd.read_parquet(chemins["df_train"])
+    df_test  = pd.read_parquet(chemins["df_test"])
+    scaler   = joblib.load(chemins["scaler"])
+
+    print(f"[load_processed] df_train={df_train.shape}  df_test={df_test.shape}  scaler chargé")
+    return df_train, df_test, scaler
+
+
+# ---------------------------------------------------------------------------
+# Point d'entrée direct — pipeline complet bout en bout
 # ---------------------------------------------------------------------------
 
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("Pipeline data_loader vibae-monitor")
+    print("=" * 60)
+
+    # 1. Chargement
     df = load_all_signals()
-    print(df.head())
-    print("\nRépartition des labels :")
-    print(df["label"].value_counts())
+
+    # 2. Split AVANT normalisation (anti data-leakage)
+    df_train, df_test = split_anomaly_detection(df)
+
+    # 3. Normalisation : fit sur train, transform sur test
+    df_train, scaler = normalize(df_train)
+    df_test, _       = normalize(df_test, scaler=scaler)
+
+    # 4. Sauvegarde
+    save_processed(df_train, df_test, scaler)
+
+    print("\n[OK] Pipeline termine. Les fichiers suivants sont prets :")
+    print("  data/processed/df_train.parquet")
+    print("  data/processed/df_test.parquet")
+    print("  models/scaler.pkl")
+    print("\nP3 (ML) peut maintenant utiliser load_processed() pour entrainer l'autoencoder.")

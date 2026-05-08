@@ -13,3 +13,5 @@ mlflow
 dvc
 jupyter
 kagglehub
+pyarrow
+joblib
