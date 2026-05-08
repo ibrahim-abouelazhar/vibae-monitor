@@ -11,4 +11,8 @@ uvicorn
 plotly
 mlflow
 dvc
-jupy
+jupyter
+kagglehub
+pyarrow
+joblib
+pytest
