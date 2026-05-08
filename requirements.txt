@@ -11,4 +11,5 @@ uvicorn
 plotly
 mlflow
 dvc
-jupy
+jupyter
+kagglehub
