@@ -1,0 +1,17 @@
+# ── VibAE-Monitor — params.yaml ─────────────────────────────────────────────
+# Paramètres du pipeline DVC
+# Modifiez ces valeurs et relancez `dvc repro` pour rejouer les étapes impactées
+
+# Signal
+window_size: 1024
+overlap: 0.5
+sampling_rate: 12000
+
+# Split
+train_ratio: 0.8
+random_seed: 42
+
+# Entraînement
+epochs: 50
+batch_size: 32
+sigma: 3          # seuil = µ + sigma * σ

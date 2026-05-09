@@ -1,0 +1,78 @@
+# ── VibAE-Monitor — dvc.yaml ────────────────────────────────────────────────
+# Pipeline DVC complet : données brutes → modèle entraîné → seuil
+#
+# Commandes utiles :
+#   dvc repro              ← rejoue uniquement les étapes invalidées
+#   dvc dag                ← affiche le graphe du pipeline
+#   dvc params diff        ← compare les paramètres entre versions
+#   dvc metrics show       ← affiche les métriques enregistrées
+
+stages:
+
+  # ── Étape 1 : Chargement + fenêtrage + normalisation + split ──────────────
+  data_loader:
+    cmd: python -m src.data_loader
+    deps:
+      - src/data_loader.py
+      - src/config.py
+      - data/raw/               # fichiers .mat CWRU
+    outs:
+      - data/processed/df_train.parquet
+      - data/processed/df_test.parquet
+      - models/scaler.pkl
+    params:
+      - params.yaml:
+          - window_size
+          - overlap
+          - train_ratio
+          - random_seed
+
+  # ── Étape 2 : Extraction de features (P2) ─────────────────────────────────
+  feature_extraction:
+    cmd: python -m src.features
+    deps:
+      - src/features.py
+      - src/config.py
+      - data/processed/df_train.parquet
+      - data/processed/df_test.parquet
+    outs:
+      - data/features/df_features_train.parquet
+      - data/features/df_features_test.parquet
+
+  # ── Étape 3 : Entraînement de l'autoencoder (P3) ──────────────────────────
+  train:
+    cmd: python -m src.train
+    deps:
+      - src/train.py
+      - src/model.py
+      - src/config.py
+      - data/processed/df_train.parquet
+      - data/processed/df_test.parquet
+      - models/scaler.pkl
+    outs:
+      - models/autoencoder.keras
+      - models/threshold.pkl
+    metrics:
+      - metrics/train_metrics.json:
+          cache: false
+    params:
+      - params.yaml:
+          - epochs
+          - batch_size
+          - sigma
+
+  # ── Étape 4 : Évaluation du modèle ────────────────────────────────────────
+  evaluate:
+    cmd: python -m src.evaluate
+    deps:
+      - src/evaluate.py
+      - models/autoencoder.keras
+      - models/threshold.pkl
+      - models/scaler.pkl
+      - data/processed/df_test.parquet
+    metrics:
+      - metrics/eval_metrics.json:
+          cache: false
+    plots:
+      - metrics/roc_curve.json:
+          cache: false

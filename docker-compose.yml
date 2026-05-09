@@ -1,0 +1,63 @@
+# ── VibAE-Monitor — docker-compose.yml ──────────────────────────────────────
+# Services :
+#   - api      : FastAPI /predict sur le port 8000
+#   - mlflow   : UI de tracking sur le port 5000
+#
+# Lancement :
+#   docker-compose up --build
+#
+# Arrêt :
+#   docker-compose down
+
+version: "3.9"
+
+services:
+
+  # ── FastAPI — API de détection d'anomalies ────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vibae-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Monter models/ en live — utile après un réentraînement
+      - ./models:/app/models
+      - ./data:/app/data
+    environment:
+      - MODELS_DIR=/app/models
+      - MLFLOW_TRACKING_URI=http://mlflow:5000
+    depends_on:
+      - mlflow
+    networks:
+      - vibae-net
+    restart: unless-stopped
+
+  # ── MLflow — Tracking des expériences ─────────────────────────────────────
+  mlflow:
+    image: python:3.11-slim
+    container_name: vibae-mlflow
+    working_dir: /mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlflow/mlruns       # Persistance des runs
+      - ./mlartifacts:/mlflow/artifacts
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=sqlite:///mlflow.db
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=/mlflow/artifacts
+    command: >
+      bash -c "pip install mlflow --quiet &&
+               mlflow server
+               --backend-store-uri sqlite:///mlflow.db
+               --default-artifact-root /mlflow/artifacts
+               --host 0.0.0.0
+               --port 5000"
+    networks:
+      - vibae-net
+    restart: unless-stopped
+
+networks:
+  vibae-net:
+    driver: bridge

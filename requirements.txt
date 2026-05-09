@@ -1,0 +1,37 @@
+# ── VibAE-Monitor — requirements.txt ────────────────────────────────────────
+
+# Data
+numpy
+pandas
+scipy
+scikit-learn
+pyarrow
+joblib
+
+# ML / Deep Learning
+torch
+tensorflow
+keras
+
+# Visualisation & Exploration
+matplotlib
+seaborn
+plotly
+jupyter
+kagglehub
+
+# MLOps
+mlflow
+dvc
+
+# API Backend (P4)
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+
+# Frontend (P5)
+streamlit
+
+# Tests
+pytest
+httpx        # pour tester FastAPI avec pytest

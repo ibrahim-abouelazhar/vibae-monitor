@@ -1,0 +1,36 @@
+data/raw/
+data/processed/
+data/features/
+models/*.pth
+models/*.pkl
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+venv/
+.env
+mlruns/
+.DS_Store
+Thumbs.db
+# Claude Code local config
+.claude/
+
+# Modèles entraînés (trop lourds pour GitHub)
+models/*.keras
+models/threshold.json
+models/training_history.json
+models/autoencoder_best.keras
+
+# MLflow base de données locale
+mlflow.db
+
+# Dossiers MLflow locaux
+mlartifacts/
+
+# Environnement virtuel
+.venv/
+
+# Cache pytest
+.pytest_cache/
+
+# Data volumineuse
+data/raw/
