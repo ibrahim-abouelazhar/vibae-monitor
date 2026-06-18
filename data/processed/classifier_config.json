@@ -1,5 +1,5 @@
 {
-    "model_type": "cnn_classifier",
+    "model_type": "densenet_classifier",
     "num_classes": 10,
     "labels_map": {
         "Normal": 0,
@@ -13,5 +13,5 @@
         "OR_014": 8,
         "OR_021": 9
     },
-    "best_val_accuracy": 0.9206521739130434
+    "best_val_accuracy": 0.4467391304347826
 }
