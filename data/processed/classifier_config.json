@@ -1,0 +1,17 @@
+{
+    "model_type": "cnn_classifier",
+    "num_classes": 10,
+    "labels_map": {
+        "Normal": 0,
+        "Ball_007": 1,
+        "Ball_014": 2,
+        "Ball_021": 3,
+        "IR_007": 4,
+        "IR_014": 5,
+        "IR_021": 6,
+        "OR_007": 7,
+        "OR_014": 8,
+        "OR_021": 9
+    },
+    "best_val_accuracy": 0.9206521739130434
+}
