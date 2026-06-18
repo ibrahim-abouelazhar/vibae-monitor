@@ -1,286 +1,450 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html class="dark" lang="fr">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>VibAE-Monitor | Maintenance Prédictive</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.24.2/plotly.min.js"></script>
+  <script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Geist','sans-serif'], mono: ['Geist Mono','monospace'] },
+        }
+      }
+    }
+  </script>
   <style>
+    /* ── CSS Variables ── */
     :root {
-      --bg:#0e1117; --panel:#161b26; --card:#1f2736; --card2:#252e40;
-      --border:#2d3748; --text:#fff; --muted:#a0aec0; --dim:#718096;
-      --green:#00FF66; --red:#FF3366; --cyan:#00B8FF; --orange:#FF9900; --yellow:#FFB700;
+      --bg:#0f131f; --surface:#1b1f2c; --surface-high:#262a37; --surface-variant:#313442;
+      --text:#dfe2f3; --muted:#b9ccb5; --dim:#8a9a87;
+      --green:#6bff83; --green-dim:#00e55b; --cyan:#84cfff; --blue:#00b6fd;
+      --red:#ffb4ab; --red-vivid:#ff5252; --amber:#ffaa00; --yellow:#ffd500;
+      --border:rgba(255,255,255,.1); --border-subtle:rgba(255,255,255,.05);
     }
     *{box-sizing:border-box;margin:0;padding:0}
-    body{background:var(--bg);color:var(--text);font-family:'Outfit','Inter',sans-serif;height:100vh;display:flex;overflow:hidden}
+    body{background:var(--bg);color:var(--text);font-family:'Geist',sans-serif;height:100vh;overflow:hidden;display:flex;position:relative}
+
+    /* ── Glass Panels ── */
+    .glass-panel{background:rgba(27,31,44,.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--border);transition:border-color .3s}
+    .glass-panel:hover{border-color:rgba(255,255,255,.18)}
+    .glass-card{background:rgba(38,42,55,.5);backdrop-filter:blur(8px);border:1px solid var(--border-subtle);transition:all .3s}
+    .glass-card:hover{border-color:rgba(255,255,255,.15);box-shadow:inset 0 0 20px rgba(107,255,131,.04)}
+
+    /* ── Glow Effects ── */
+    .glow-green{box-shadow:0 0 15px rgba(107,255,131,.3)}
+    .glow-red{box-shadow:0 0 18px rgba(255,82,82,.18)!important;border-color:rgba(255,180,171,.5)!important}
+    .glow-cyan{box-shadow:0 0 15px rgba(132,207,255,.3)}
+    .glow-amber{box-shadow:0 0 15px rgba(255,170,0,.3)}
+
+    /* ── Noise Overlay ── */
+    .noise-overlay{position:fixed;inset:0;pointer-events:none;z-index:1;opacity:.04;
+      background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 
     /* ── Sidebar ── */
-    .sidebar{width:290px;background:var(--panel);border-right:1px solid var(--border);padding:18px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;flex-shrink:0}
-    .logo{color:var(--green);font-size:1.45rem;font-weight:800;text-align:center}
-    .tagline{font-size:.74rem;color:var(--muted);text-align:center;margin-top:2px}
-    hr.sep{border:none;border-top:1px solid var(--border)}
-    .clabel{font-size:.75rem;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;display:block}
-    .slider-row{display:flex;justify-content:space-between;font-size:.8rem;color:var(--muted);margin-bottom:3px}
-    input[type=range]{width:100%;-webkit-appearance:none;height:5px;border-radius:3px;background:var(--border);outline:none}
-    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;background:var(--green);cursor:pointer}
-    .btn{width:100%;padding:10px;border-radius:8px;font-weight:700;font-size:.9rem;font-family:inherit;cursor:pointer;border:none;transition:all .18s;display:flex;align-items:center;justify-content:center;gap:7px}
-    .btn-green{background:var(--green);color:var(--bg)}.btn-green:hover{filter:brightness(1.12)}
-    .btn-red{background:var(--red);color:#fff}.btn-red:hover{filter:brightness(1.12)}
-    .btn-blue{background:var(--cyan);color:var(--bg)}.btn-blue:hover{filter:brightness(1.12)}
-    .btn-outline{background:transparent;border:1px solid var(--border);color:var(--muted)}.btn-outline:hover{border-color:var(--muted);color:#fff}
-    .counter-box{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center}
-    .counter-label{font-size:.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-    .counter-value{font-size:1rem;font-weight:700;color:var(--cyan);margin-top:3px}
+    .sidebar{position:fixed;left:0;top:0;width:300px;height:100%;background:rgba(27,31,44,.6);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-right:1px solid var(--border);box-shadow:4px 0 24px rgba(0,0,0,.3);display:flex;flex-direction:column;justify-content:space-between;padding:20px;z-index:40;overflow-y:auto}
+    .nav-link{display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;transition:all .25s;border:1px solid transparent;text-decoration:none}
+    .nav-link:hover:not(.active){color:var(--text);background:rgba(255,255,255,.05)}
+    .nav-link.active{background:rgba(0,255,102,.12);color:var(--green-dim);border-color:rgba(107,255,131,.3);box-shadow:0 0 15px rgba(0,229,91,.2);font-weight:600}
+    .nav-link.active .material-symbols-outlined{font-variation-settings:'FILL' 1}
+    .sep{border:none;border-top:1px solid var(--border);margin:8px 0}
+    .clabel{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 
-    /* ── Main ── */
-    .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+    /* ── Range Slider ── */
+    input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--surface-variant);outline:none;margin:6px 0}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--green);cursor:pointer;box-shadow:0 0 8px rgba(107,255,131,.5)}
 
-    /* ── Tabs ── */
-    .tabs{display:flex;gap:2px;background:var(--panel);border-bottom:1px solid var(--border);padding:0 20px;flex-shrink:0}
-    .tab{padding:14px 22px;font-size:.88rem;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;color:var(--muted);transition:all .18s;white-space:nowrap}
-    .tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
-    .tab:hover:not(.active){color:var(--text)}
+    /* ── Buttons ── */
+    .btn{width:100%;padding:10px;border-radius:8px;font-weight:700;font-size:13px;font-family:inherit;cursor:pointer;border:1px solid transparent;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px;text-transform:uppercase;letter-spacing:.04em}
+    .btn-start{background:rgba(107,255,131,.15);color:var(--green);border-color:rgba(107,255,131,.4)}
+    .btn-start:hover:not(:disabled){box-shadow:0 0 15px rgba(107,255,131,.3);background:rgba(107,255,131,.22)}
+    .btn-stop{background:rgba(255,180,171,.1);color:var(--red);border-color:rgba(255,180,171,.3)}
+    .btn-stop:hover:not(:disabled){box-shadow:0 0 15px rgba(255,180,171,.3);background:rgba(255,180,171,.18)}
+    .btn:disabled{opacity:.4;cursor:not-allowed}
+    .btn-ghost{background:transparent;border:1px solid var(--border);color:var(--muted);text-transform:none;letter-spacing:0;font-weight:600}
+    .btn-ghost:hover{border-color:rgba(255,255,255,.2);color:var(--text)}
+    .btn-cyan{background:rgba(0,182,253,.15);color:var(--cyan);border-color:rgba(132,207,255,.4)}
+    .btn-cyan:hover:not(:disabled){box-shadow:0 0 15px rgba(132,207,255,.3);background:rgba(0,182,253,.25)}
 
-    .tab-content{flex:1;overflow-y:auto;padding:18px 20px;display:none}
-    .tab-content.active{display:block}
+    /* ── Counter Boxes ── */
+    .counter-box{background:rgba(27,31,44,.6);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:10px;padding:10px;display:flex;flex-direction:column}
+    .counter-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+    .counter-value{font-size:20px;font-weight:700;font-family:'Geist Mono',monospace;margin-top:2px}
 
-    /* ── Realtime header ── */
-    .rt-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-    .rt-header h1{font-size:1.75rem;font-weight:800;background:linear-gradient(90deg,#00FF66,#00B8FF);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
-    .badge{display:inline-flex;align-items:center;gap:6px;padding:5px 13px;border-radius:20px;font-size:.8rem;font-weight:600;border:1px solid transparent}
-    .badge.on{background:rgba(0,255,102,.1);color:var(--green);border-color:rgba(0,255,102,.2)}
-    .badge.off{background:rgba(255,51,102,.1);color:var(--red);border-color:rgba(255,51,102,.2)}
+    /* ── Status Badge ── */
+    .status-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;border:1px solid transparent}
+    .status-badge.off{background:rgba(255,180,171,.1);color:var(--red);border-color:rgba(255,180,171,.25)}
+    .status-badge.on{background:rgba(107,255,131,.1);color:var(--green);border-color:rgba(107,255,131,.3)}
+    .pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px rgba(107,255,131,.8);animation:pulse-glow 1.5s ease-in-out infinite}
+    @keyframes pulse-glow{0%,100%{opacity:1;box-shadow:0 0 6px rgba(107,255,131,.8)}50%{opacity:.5;box-shadow:0 0 14px rgba(107,255,131,.3)}}
 
-    /* ── Machine grid ── */
-    .machine-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
-    .machine-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:10px;transition:border-color .2s}
-    .machine-card.anomaly{border-color:var(--red);box-shadow:0 0 14px rgba(255,51,102,.12)}
+    /* ── Main Content ── */
+    .main-area{margin-left:300px;flex:1;display:flex;flex-direction:column;height:100vh;position:relative;z-index:10}
+    .top-bar{height:64px;background:rgba(15,19,31,.8);backdrop-filter:blur(12px);border-bottom:1px solid var(--border-subtle);display:flex;justify-content:space-between;align-items:center;padding:0 28px;flex-shrink:0;position:sticky;top:0;z-index:20}
+    .gradient-title{font-size:26px;font-weight:700;background:linear-gradient(90deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.01em}
+    .tab-content{display:none;flex:1;overflow-y:auto;padding:24px 28px;opacity:0;transform:translateY(8px);transition:opacity .35s ease,transform .35s ease}
+    .tab-content.active{display:block;opacity:1;transform:translateY(0)}
 
-    .card-header{display:flex;justify-content:space-between;align-items:center}
-    .card-name{font-size:1rem;font-weight:700}
-    .card-badge{padding:3px 9px;border-radius:10px;font-size:.72rem;font-weight:700}
-    .card-badge.ok{background:rgba(0,255,102,.12);color:var(--green)}
-    .card-badge.anomaly{background:rgba(255,51,102,.12);color:var(--red)}
+    /* ── Machine Cards ── */
+    .machine-card{transition:all .3s}
+    .machine-card:hover{transform:translateY(-3px)}
+    .card-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.04em;border:1px solid transparent}
+    .card-badge.ok{background:rgba(107,255,131,.1);color:var(--green);border-color:rgba(107,255,131,.2)}
+    .card-badge.anomaly{background:rgba(255,180,171,.12);color:var(--red);border-color:rgba(255,180,171,.4);animation:pulse-badge 2s ease-in-out infinite}
+    @keyframes pulse-badge{0%,100%{box-shadow:none}50%{box-shadow:0 0 10px rgba(255,82,82,.2)}}
 
-    /* Fault selector */
-    .fault-row{display:flex;align-items:center;gap:8px}
-    .fault-row select{flex:1;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:6px;font-family:inherit;font-size:.8rem}
-    .fault-row select:focus{outline:none;border-color:var(--cyan)}
+    /* ── Severity Bar ── */
+    .sev-bar-bg{flex:1;height:6px;background:var(--surface-variant);border-radius:3px;overflow:hidden}
+    .sev-bar-fill{height:100%;border-radius:3px;transition:width .4s ease,background .4s;box-shadow:0 0 6px currentColor}
+    .sev-zone{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px}
 
-    /* ── Metrics row ── */
-    .metrics-row{display:flex;gap:8px}
-    .metric{flex:1;background:var(--card2);border-radius:8px;padding:7px 10px;text-align:center}
-    .metric-val{font-size:1rem;font-weight:700;color:var(--cyan)}
-    .metric-lbl{font-size:.65rem;color:var(--muted);margin-top:1px}
+    /* ── Metric Tiles ── */
+    .metric-tile{background:rgba(38,42,55,.45);border-radius:8px;padding:6px 8px;text-align:center}
+    .metric-val{font-size:13px;font-weight:700;font-family:'Geist Mono',monospace;color:var(--cyan)}
+    .metric-lbl{font-size:9px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-top:1px}
 
-    /* ── Severity gauge ── */
-    .sev-row{display:flex;align-items:center;gap:10px}
-    .sev-label{font-size:.72rem;color:var(--muted);width:56px;flex-shrink:0}
-    .sev-bar-bg{flex:1;height:10px;background:var(--border);border-radius:5px;overflow:hidden}
-    .sev-bar-fill{height:100%;border-radius:5px;transition:width .4s,background .4s}
-    .sev-score{font-size:.88rem;font-weight:700;width:36px;text-align:right;flex-shrink:0}
-    .sev-zone{font-size:.68rem;padding:2px 7px;border-radius:8px;font-weight:700;flex-shrink:0}
+    /* ── Chart Boxes ── */
+    .chart-box{background:rgba(27,31,44,.35);border:1px solid var(--border-subtle);border-radius:8px;padding:6px;overflow:hidden}
+    .chart-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
 
     /* ── Trend ── */
-    .trend-row{display:flex;align-items:center;gap:7px;font-size:.8rem}
-    .trend-icon{font-size:1.1rem}
-    .trend-label{color:var(--muted)}
-    .trend-alert{background:rgba(255,183,0,.12);color:var(--yellow);padding:2px 8px;border-radius:6px;font-size:.7rem;font-weight:700}
+    .trend-row{display:flex;align-items:center;gap:6px;font-size:13px}
+    .trend-alert{background:rgba(255,170,0,.12);color:var(--amber);padding:2px 8px;border-radius:6px;font-size:11px;font-weight:700}
 
-    /* ── Charts ── */
-    .charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-    .chart-box{background:var(--card2);border-radius:8px;overflow:hidden}
-    .chart-box .chart-title{font-size:.72rem;color:var(--muted);padding:7px 10px 0;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+    /* ── History KPIs ── */
+    .kpi-square{display:flex;flex-direction:column;justify-content:space-between;aspect-ratio:1;padding:16px}
+    .kpi-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+    .kpi-value{font-size:36px;font-weight:700;font-family:'Geist Mono',monospace;line-height:1.1}
+    .stat-card{text-align:center;padding:16px;border-radius:12px}
+    .stat-val{font-size:28px;font-weight:800;font-family:'Geist Mono',monospace}
+    .stat-lbl{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
 
-    /* ── History tab ── */
-    .hist-controls{display:flex;gap:12px;align-items:center;margin-bottom:14px;flex-wrap:wrap}
-    .hist-controls select,.hist-controls input{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 10px;border-radius:7px;font-family:inherit;font-size:.85rem}
-    .hist-controls select:focus,.hist-controls input:focus{outline:none;border-color:var(--cyan)}
-    .btn-sm{padding:7px 16px;font-size:.82rem;border-radius:7px;font-weight:600;cursor:pointer;border:none;font-family:inherit}
-    .btn-sm-cyan{background:var(--cyan);color:var(--bg)}.btn-sm-cyan:hover{filter:brightness(1.1)}
-    .stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
-    .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
-    .stat-val{font-size:1.5rem;font-weight:800;color:var(--cyan)}
-    .stat-lbl{font-size:.72rem;color:var(--muted);margin-top:3px}
-    .hist-chart{background:var(--card);border-radius:10px;margin-bottom:14px}
-    .data-table{width:100%;border-collapse:collapse;font-size:.82rem}
-    .data-table th{padding:9px 12px;text-align:left;color:var(--muted);font-weight:600;font-size:.72rem;text-transform:uppercase;border-bottom:1px solid var(--border)}
-    .data-table td{padding:8px 12px;border-bottom:1px solid rgba(45,55,72,.5)}
+    /* ── Alerts ── */
+    .alert-item{background:rgba(38,42,55,.4);border-left:3px solid var(--red);border-radius:0 8px 8px 0;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;transition:background .2s}
+    .alert-item:hover{background:rgba(38,42,55,.7)}
+    .alert-sev{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em}
+
+    /* ── Data Table ── */
+    .data-table{width:100%;border-collapse:collapse;font-size:13px;font-family:'Geist Mono',monospace}
+    .data-table th{padding:12px 16px;text-align:left;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--border);background:rgba(49,52,66,.3)}
+    .data-table td{padding:10px 16px;border-bottom:1px solid var(--border-subtle);color:var(--text)}
     .data-table tr:hover td{background:rgba(255,255,255,.03)}
-    .pill{padding:2px 8px;border-radius:8px;font-size:.7rem;font-weight:700}
-    .pill-ok{background:rgba(0,255,102,.1);color:var(--green)}
-    .pill-anomaly{background:rgba(255,51,102,.1);color:var(--red)}
-    .alerts-list{display:flex;flex-direction:column;gap:8px}
-    .alert-item{background:var(--card);border:1px solid rgba(255,51,102,.25);border-radius:9px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center}
-    .alert-item .al-machine{font-weight:700;font-size:.88rem}
-    .alert-item .al-fault{color:var(--red);font-size:.82rem}
-    .alert-item .al-time{color:var(--dim);font-size:.75rem}
-    .alert-item .al-sev{font-weight:700;font-size:.88rem}
+    .pill{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;border:1px solid transparent}
+    .pill-ok{background:rgba(107,255,131,.1);color:var(--green);border-color:rgba(107,255,131,.3)}
+    .pill-anomaly{background:rgba(255,180,171,.12);color:var(--red);border-color:rgba(255,180,171,.4)}
 
-    /* ── Batch tab ── */
-    .batch-setup{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px}
-    .batch-setup h3{font-size:1.05rem;font-weight:700;margin-bottom:12px;color:var(--cyan)}
-    .batch-fields{display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end}
-    .field-group label{font-size:.75rem;color:var(--muted);display:block;margin-bottom:5px;font-weight:600}
-    .field-group select,.field-group input{width:100%;background:var(--card2);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:7px;font-family:inherit;font-size:.88rem}
-    .field-group select:focus,.field-group input:focus{outline:none;border-color:var(--cyan)}
+    /* ── Batch ── */
     .batch-results{display:none}
-    .batch-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-    .kpi-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px;text-align:center}
-    .kpi-val{font-size:1.6rem;font-weight:800}
-    .kpi-lbl{font-size:.7rem;color:var(--muted);margin-top:3px}
-    .batch-charts{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-    .batch-class-table{background:var(--card);border-radius:10px;padding:14px}
-    .batch-class-table h4{font-size:.88rem;font-weight:700;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
-    .class-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:.85rem}
-    .class-bar-bg{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
-    .class-bar-fill{height:100%;border-radius:4px;background:var(--cyan)}
-    .class-count{width:36px;text-align:right;color:var(--muted)}
-    .spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite}
+    .industrial-input{background:#000;border:1px solid var(--surface-variant);color:var(--text);padding:10px 14px;border-radius:8px;font-family:'Geist',sans-serif;font-size:14px;width:100%;transition:all .2s}
+    .industrial-input:focus{border-color:var(--green);box-shadow:0 0 8px rgba(107,255,131,.3);outline:none}
+    .class-bar-bg{flex:1;height:10px;background:var(--surface-variant);border-radius:5px;overflow:hidden}
+    .class-bar-fill{height:100%;border-radius:5px;background:var(--cyan);box-shadow:0 0 6px rgba(132,207,255,.5)}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid var(--surface-variant);border-top-color:var(--cyan);border-radius:50%;animation:spin .7s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
 
-    /* Scrollbar */
+    /* ── Toast Notifications ── */
+    .toast-container{position:fixed;top:76px;right:24px;z-index:999;display:flex;flex-direction:column;gap:8px;pointer-events:none}
+    .toast{pointer-events:auto;display:flex;align-items:center;gap:10px;padding:12px 18px;border-radius:10px;font-size:13px;font-weight:600;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.4);min-width:280px;max-width:420px;animation:toast-in .4s ease forwards;opacity:0;transform:translateX(40px)}
+    .toast.removing{animation:toast-out .35s ease forwards}
+    .toast-anomaly{background:rgba(255,82,82,.15);border-color:rgba(255,180,171,.4);color:var(--red)}
+    .toast-info{background:rgba(107,255,131,.1);border-color:rgba(107,255,131,.3);color:var(--green)}
+    .toast-warn{background:rgba(255,170,0,.12);border-color:rgba(255,170,0,.3);color:var(--amber)}
+    .toast .material-symbols-outlined{font-size:20px;flex-shrink:0;font-variation-settings:'FILL' 1}
+    .toast-close{margin-left:auto;cursor:pointer;font-size:16px!important;opacity:.5;transition:opacity .2s;font-variation-settings:'FILL' 0!important}
+    .toast-close:hover{opacity:1}
+    @keyframes toast-in{to{opacity:1;transform:translateX(0)}}
+    @keyframes toast-out{to{opacity:0;transform:translateX(40px)}}
+
+    /* ── Animated Counter ── */
+    .counter-value{font-size:20px;font-weight:700;font-family:'Geist Mono',monospace;margin-top:2px;transition:transform .15s}
+    .counter-value.bump{transform:scale(1.25)}
+
+    /* ── Health Summary Bar ── */
+    .health-bar{display:flex;gap:10px;margin-bottom:18px}
+    .health-chip{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:10px;background:rgba(27,31,44,.5);backdrop-filter:blur(8px);border:1px solid var(--border-subtle);flex:1;transition:all .3s}
+    .health-chip:hover{border-color:rgba(255,255,255,.15)}
+    .health-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;transition:all .4s}
+    .health-dot.ok{background:var(--green);box-shadow:0 0 8px rgba(107,255,131,.6)}
+    .health-dot.warn{background:var(--amber);box-shadow:0 0 8px rgba(255,170,0,.6);animation:pulse-glow-amber 1.5s ease-in-out infinite}
+    .health-dot.critical{background:var(--red-vivid);box-shadow:0 0 8px rgba(255,82,82,.6);animation:pulse-glow-red 1.2s ease-in-out infinite}
+    @keyframes pulse-glow-amber{0%,100%{box-shadow:0 0 8px rgba(255,170,0,.6)}50%{box-shadow:0 0 16px rgba(255,170,0,.2)}}
+    @keyframes pulse-glow-red{0%,100%{box-shadow:0 0 8px rgba(255,82,82,.6)}50%{box-shadow:0 0 18px rgba(255,82,82,.2)}}
+    .health-name{font-size:13px;font-weight:600}
+    .health-status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;margin-left:auto}
+
+    /* ── Connection Indicator ── */
+    .conn-indicator{display:flex;align-items:center;gap:6px;padding:3px 12px;border-radius:16px;font-size:11px;font-weight:700;letter-spacing:.04em;transition:all .3s}
+    .conn-indicator.connected{background:rgba(107,255,131,.08);color:var(--green);border:1px solid rgba(107,255,131,.2)}
+    .conn-indicator.disconnected{background:rgba(255,180,171,.08);color:var(--red);border:1px solid rgba(255,180,171,.2)}
+    .conn-indicator .conn-dot{width:6px;height:6px;border-radius:50%}
+    .conn-indicator.connected .conn-dot{background:var(--green);box-shadow:0 0 4px rgba(107,255,131,.8)}
+    .conn-indicator.disconnected .conn-dot{background:var(--red);box-shadow:0 0 4px rgba(255,180,171,.8)}
+
+    /* ── Keyboard Hint ── */
+    .kbd{display:inline-flex;align-items:center;justify-content:center;min-width:20px;padding:1px 5px;border-radius:4px;font-size:10px;font-weight:600;font-family:'Geist Mono',monospace;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);color:var(--muted)}
+
+    /* ── Scrollbar ── */
     ::-webkit-scrollbar{width:6px;height:6px}
     ::-webkit-scrollbar-track{background:transparent}
-    ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+    ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2)}
+    ::selection{background:rgba(107,255,131,.25);color:var(--green)}
   </style>
 </head>
 <body>
 
-<!-- ══════════ SIDEBAR ══════════ -->
-<div class="sidebar">
-  <div class="logo">⚡ VibAE-Monitor</div>
-  <div class="tagline">Maintenance Prédictive Temps Réel</div>
-  <hr class="sep">
-
-  <div>
-    <span class="clabel">Fréquence d'envoi</span>
-    <div class="slider-row"><span>Lent</span><span id="freq-val">250 ms</span><span>Rapide</span></div>
-    <input type="range" id="freq-slider" min="50" max="500" value="250" step="25"
-           oninput="document.getElementById('freq-val').textContent=this.value+' ms'">
-  </div>
-
-  <div>
-    <span class="clabel">Échantillons / envoi</span>
-    <div class="slider-row"><span>32</span><span id="chunk-val">256</span><span>512</span></div>
-    <input type="range" id="chunk-slider" min="32" max="512" value="256" step="32"
-           oninput="document.getElementById('chunk-val').textContent=this.value">
-  </div>
-
-  <hr class="sep">
-  <button class="btn btn-green" id="btn-start" onclick="startMonitoring()">▶ Démarrer</button>
-  <button class="btn btn-red" id="btn-stop" onclick="stopMonitoring()" disabled>■ Arrêter</button>
-
-  <hr class="sep">
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-    <div class="counter-box"><div class="counter-label">Inférences</div><div class="counter-value" id="cnt-inf">0</div></div>
-    <div class="counter-box"><div class="counter-label">Anomalies</div><div class="counter-value" id="cnt-anom" style="color:var(--red)">0</div></div>
-    <div class="counter-box"><div class="counter-label">Machines</div><div class="counter-value">4</div></div>
-    <div class="counter-box"><div class="counter-label">Uptime</div><div class="counter-value" id="cnt-uptime">00:00</div></div>
-  </div>
-
-  <hr class="sep">
-  <button class="btn btn-outline" onclick="exportPDF()">⬇ Rapport PDF</button>
+<!-- ══════════ SHADER BACKGROUND ══════════ -->
+<div style="position:fixed;inset:0;z-index:0;opacity:.5">
+<canvas id="shader-canvas" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function(){
+  const canvas=document.getElementById('shader-canvas');
+  function syncSize(){const w=canvas.clientWidth||1280,h=canvas.clientHeight||720;if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h}}
+  if(typeof ResizeObserver!=='undefined')new ResizeObserver(syncSize).observe(canvas);
+  syncSize();
+  const gl=canvas.getContext('webgl')||canvas.getContext('experimental-webgl');
+  if(!gl)return;
+  const vs=`attribute vec2 a_position;void main(){gl_Position=vec4(a_position,0.0,1.0);}`;
+  const fs=`precision highp float;uniform float u_time;uniform vec2 u_resolution;
+  void main(){vec2 uv=gl_FragCoord.xy/u_resolution.xy;float t=u_time*0.2;
+  float n1=sin(uv.x*3.0+t)*cos(uv.y*2.0-t*0.5);float n2=sin(uv.y*4.0-t*0.8)*cos(uv.x*5.0+t*0.3);
+  vec3 c1=vec3(0.039,0.055,0.102);vec3 c2=vec3(0.0,0.1,0.25);vec3 c3=vec3(0.05,0.07,0.15);
+  float m=(n1+n2+2.0)*0.25;vec3 col=mix(c1,mix(c2,c3,uv.y),m);
+  col+=(fract(sin(dot(uv,vec2(12.9898,78.233)))*43758.5453)-0.5)*0.02;
+  gl_FragColor=vec4(col,1.0);}`;
+  function cs(type,src){const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);return s}
+  const prog=gl.createProgram();gl.attachShader(prog,cs(gl.VERTEX_SHADER,vs));gl.attachShader(prog,cs(gl.FRAGMENT_SHADER,fs));gl.linkProgram(prog);gl.useProgram(prog);
+  const buf=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,buf);gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+  const pos=gl.getAttribLocation(prog,'a_position');gl.enableVertexAttribArray(pos);gl.vertexAttribPointer(pos,2,gl.FLOAT,false,0,0);
+  const uTime=gl.getUniformLocation(prog,'u_time'),uRes=gl.getUniformLocation(prog,'u_resolution');
+  function render(t){if(typeof ResizeObserver==='undefined')syncSize();gl.viewport(0,0,canvas.width,canvas.height);gl.uniform1f(uTime,t*0.001);gl.uniform2f(uRes,canvas.width,canvas.height);gl.drawArrays(gl.TRIANGLE_STRIP,0,4);requestAnimationFrame(render)}
+  render(0);
+})();
+</script>
 </div>
+<div class="noise-overlay"></div>
 
-<!-- ══════════ MAIN ══════════ -->
-<div class="main">
+<!-- ══════════ SIDEBAR ══════════ -->
+<nav class="sidebar">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <!-- Logo -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <span class="material-symbols-outlined" style="font-size:28px;color:var(--green);filter:drop-shadow(0 0 8px rgba(107,255,131,.5));font-variation-settings:'FILL' 1">bolt</span>
+      <div>
+        <div style="font-size:20px;font-weight:800;color:var(--green);filter:drop-shadow(0 0 8px rgba(107,255,131,.4))">VibAE-Monitor</div>
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Système de Maintenance Prédictive</div>
+      </div>
+    </div>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <div class="tab active" onclick="switchTab('rt',this)">🔴 Temps Réel</div>
-    <div class="tab" onclick="switchTab('hist',this)">📊 Historique</div>
-    <div class="tab" onclick="switchTab('batch',this)">🔬 Diagnostic Batch</div>
+    <!-- Navigation -->
+    <a class="nav-link active" onclick="switchTab('rt',this)">
+      <span class="material-symbols-outlined">timeline</span> Temps Réel <span class="kbd" style="margin-left:auto">1</span>
+    </a>
+    <a class="nav-link" onclick="switchTab('hist',this)">
+      <span class="material-symbols-outlined">history</span> Historique <span class="kbd" style="margin-left:auto">2</span>
+    </a>
+    <a class="nav-link" onclick="switchTab('batch',this)">
+      <span class="material-symbols-outlined">analytics</span> Diagnostic Batch <span class="kbd" style="margin-left:auto">3</span>
+    </a>
+
+    <hr class="sep">
+
+    <!-- Slider: Frequency -->
+    <div>
+      <div class="clabel">Fréquence d'envoi <span id="freq-val" style="color:var(--cyan)">250 ms</span></div>
+      <input type="range" id="freq-slider" min="50" max="500" value="250" step="25"
+             oninput="document.getElementById('freq-val').textContent=this.value+' ms'">
+    </div>
+
+    <!-- Slider: Chunk -->
+    <div>
+      <div class="clabel">Échantillons / envoi <span id="chunk-val" style="color:var(--cyan)">256</span></div>
+      <input type="range" id="chunk-slider" min="32" max="512" value="256" step="32"
+             oninput="document.getElementById('chunk-val').textContent=this.value">
+    </div>
+
+    <!-- Start / Stop -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+      <button class="btn btn-start" id="btn-start" onclick="startMonitoring()">
+        <span class="material-symbols-outlined" style="font-size:16px">play_arrow</span> Démarrer
+      </button>
+      <button class="btn btn-stop" id="btn-stop" onclick="stopMonitoring()" disabled>
+        <span class="material-symbols-outlined" style="font-size:16px">stop</span> Arrêter
+      </button>
+    </div>
   </div>
+
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <!-- Counter Grid -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div class="counter-box"><span class="counter-label">Inférences</span><span class="counter-value" id="cnt-inf" style="color:var(--green)">0</span></div>
+      <div class="counter-box"><span class="counter-label">Anomalies</span><span class="counter-value" id="cnt-anom" style="color:var(--red)">0</span></div>
+      <div class="counter-box"><span class="counter-label">Machines</span><span class="counter-value" style="color:var(--text)">4</span></div>
+      <div class="counter-box"><span class="counter-label">Uptime</span><span class="counter-value" id="cnt-uptime" style="color:var(--cyan)">00:00</span></div>
+    </div>
+
+    <!-- PDF Export -->
+    <button class="btn btn-ghost" onclick="exportPDF()">
+      <span class="material-symbols-outlined" style="font-size:16px">picture_as_pdf</span> Rapport PDF
+    </button>
+
+    <hr class="sep">
+
+    <!-- Footer links -->
+    <a class="nav-link" href="#" style="padding:8px 14px;font-size:13px">
+      <span class="material-symbols-outlined" style="font-size:20px">settings</span> Paramètres
+    </a>
+    <a class="nav-link" href="#" style="padding:8px 14px;font-size:13px">
+      <span class="material-symbols-outlined" style="font-size:20px">logout</span> Déconnexion
+    </a>
+  </div>
+</nav>
+
+<!-- ══════════ MAIN CONTENT ══════════ -->
+<div class="main-area">
+
+  <!-- Top Bar -->
+  <header class="top-bar">
+    <div style="display:flex;align-items:center;gap:14px">
+      <span class="gradient-title">Tableau de Bord</span>
+      <span class="status-badge off" id="status-badge">● Arrêté</span>
+      <span class="conn-indicator disconnected" id="conn-indicator"><span class="conn-dot"></span> Hors ligne</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;color:var(--muted)">
+      <span class="kbd" style="font-size:9px;color:var(--dim)">Espace: ▶/■</span>
+      <span class="material-symbols-outlined" style="cursor:pointer;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color=''">notifications</span>
+      <span class="material-symbols-outlined" style="cursor:pointer;transition:color .2s" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color=''">account_circle</span>
+    </div>
+  </header>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
 
   <!-- ══ TAB: TEMPS RÉEL ══ -->
   <div class="tab-content active" id="tab-rt">
-    <div class="rt-header">
-      <div>
-        <h1>Tableau de Bord</h1>
-        <p style="color:var(--muted);font-size:.85rem;margin-top:3px">Surveillance vibratoire en temps réel — 4 machines industrielles</p>
-      </div>
-      <span class="badge off" id="status-badge">● Arrêté</span>
+    <div style="margin-bottom:18px">
+      <p style="color:var(--muted);font-size:14px">Surveillance vibratoire en temps réel — 4 machines industrielles</p>
     </div>
-
-    <div class="machine-grid" id="machine-grid">
-      <!-- Cards injected by JS -->
+    <!-- Health Summary Bar -->
+    <div class="health-bar" id="health-bar">
+      <!-- Built by JS -->
+    </div>
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-5" id="machine-grid">
+      <!-- Cards built by JS -->
     </div>
   </div>
 
   <!-- ══ TAB: HISTORIQUE ══ -->
   <div class="tab-content" id="tab-hist">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-      <h2 style="font-size:1.4rem;font-weight:800">Historique & Statistiques</h2>
-      <button class="btn-sm btn-sm-cyan" onclick="loadHistory()">↺ Actualiser</button>
-    </div>
-
-    <div class="hist-controls">
-      <div>
-        <span class="clabel" style="margin-bottom:3px">Machine</span>
-        <select id="hist-machine">
-          <option value="">Toutes</option>
-          <option value="machine_1">Pompe</option>
-          <option value="machine_2">Ventilateur</option>
-          <option value="machine_3">Compresseur</option>
-          <option value="machine_4">Convoyeur</option>
-        </select>
-      </div>
-      <div>
-        <span class="clabel" style="margin-bottom:3px">Limite</span>
-        <select id="hist-limit">
-          <option value="50">50</option>
-          <option value="100" selected>100</option>
-          <option value="200">200</option>
-        </select>
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <h2 style="font-size:22px;font-weight:800">Historique & Statistiques</h2>
+        <button onclick="loadHistory()" style="background:none;border:none;color:var(--cyan);cursor:pointer;padding:4px;border-radius:50%;transition:all .2s" onmouseover="this.style.background='rgba(255,255,255,.05)'" onmouseout="this.style.background='none'">
+          <span class="material-symbols-outlined">refresh</span>
+        </button>
       </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="stats-grid" id="hist-stats">
-      <div class="stat-card"><div class="stat-val" id="hs-total">—</div><div class="stat-lbl">Inférences totales</div></div>
-      <div class="stat-card"><div class="stat-val" id="hs-anomaly" style="color:var(--red)">—</div><div class="stat-lbl">Anomalies détectées</div></div>
-      <div class="stat-card"><div class="stat-val" id="hs-rate" style="color:var(--orange)">—</div><div class="stat-lbl">Taux d'anomalie</div></div>
-      <div class="stat-card"><div class="stat-val" id="hs-avg-mse" style="color:var(--cyan)">—</div><div class="stat-lbl">MSE moyen</div></div>
-      <div class="stat-card"><div class="stat-val" id="hs-avg-sev" style="color:var(--yellow)">—</div><div class="stat-lbl">Sévérité moyenne</div></div>
-      <div class="stat-card"><div class="stat-val" id="hs-max-sev" style="color:var(--red)">—</div><div class="stat-lbl">Sévérité max</div></div>
+    <!-- Filters -->
+    <div style="display:flex;gap:14px;margin-bottom:20px;flex-wrap:wrap">
+      <div class="glass-panel" style="padding:8px 16px;border-radius:10px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Machine</span>
+        <select id="hist-machine" style="background:transparent;border:none;color:var(--text);font-family:'Geist',sans-serif;font-size:14px;cursor:pointer;outline:none">
+          <option value="" style="background:var(--surface)">Toutes</option>
+          <option value="machine_1" style="background:var(--surface)">Pompe</option>
+          <option value="machine_2" style="background:var(--surface)">Ventilateur</option>
+          <option value="machine_3" style="background:var(--surface)">Compresseur</option>
+          <option value="machine_4" style="background:var(--surface)">Convoyeur</option>
+        </select>
+      </div>
+      <div class="glass-panel" style="padding:8px 16px;border-radius:10px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em">Limite</span>
+        <select id="hist-limit" style="background:transparent;border:none;color:var(--text);font-family:'Geist',sans-serif;font-size:14px;cursor:pointer;outline:none">
+          <option value="50" style="background:var(--surface)">50</option>
+          <option value="100" selected style="background:var(--surface)">100</option>
+          <option value="200" style="background:var(--surface)">200</option>
+        </select>
+      </div>
     </div>
 
-    <!-- MSE trend chart -->
-    <div class="hist-chart">
-      <div id="hist-mse-chart" style="height:200px"></div>
+    <!-- KPI Bento Grid -->
+    <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4" style="margin-bottom:20px">
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl">Inférences totales</div>
+        <div class="stat-val" id="hs-total" style="color:var(--text);margin-top:8px">—</div>
+      </div>
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl" style="color:var(--red)">Anomalies détectées</div>
+        <div class="stat-val" id="hs-anomaly" style="color:var(--red);margin-top:8px">—</div>
+      </div>
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl" style="color:var(--amber)">Taux d'anomalie</div>
+        <div class="stat-val" id="hs-rate" style="color:var(--amber);margin-top:8px">—</div>
+      </div>
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl" style="color:var(--cyan)">MSE moyen</div>
+        <div class="stat-val" id="hs-avg-mse" style="color:var(--cyan);margin-top:8px">—</div>
+      </div>
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl" style="color:var(--yellow)">Sévérité moyenne</div>
+        <div class="stat-val" id="hs-avg-sev" style="color:var(--yellow);margin-top:8px">—</div>
+      </div>
+      <div class="glass-panel" style="border-radius:12px;padding:16px">
+        <div class="stat-lbl" style="color:var(--red)">Sévérité max</div>
+        <div class="stat-val" id="hs-max-sev" style="color:var(--red);margin-top:8px">—</div>
+      </div>
     </div>
 
-    <!-- Alertes récentes -->
-    <h3 style="font-size:1rem;font-weight:700;margin:14px 0 10px;color:var(--red)">⚠ Alertes Récentes</h3>
-    <div class="alerts-list" id="alerts-list"></div>
+    <!-- MSE Trend Chart -->
+    <div class="glass-panel" style="border-radius:12px;margin-bottom:20px">
+      <div id="hist-mse-chart" style="height:220px"></div>
+    </div>
 
-    <!-- Table inférences -->
-    <h3 style="font-size:1rem;font-weight:700;margin:16px 0 10px">📋 Dernières Inférences</h3>
-    <div style="overflow-x:auto">
-      <table class="data-table">
-        <thead>
-          <tr>
+    <!-- Alerts -->
+    <h3 style="font-size:14px;font-weight:700;margin:0 0 12px;display:flex;align-items:center;gap:6px">
+      <span class="material-symbols-outlined" style="color:var(--red);font-size:18px">warning</span>
+      <span style="color:var(--red)">Alertes Récentes</span>
+    </h3>
+    <div id="alerts-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px"></div>
+
+    <!-- Inferences Table -->
+    <h3 style="font-size:14px;font-weight:700;margin:0 0 12px;display:flex;align-items:center;gap:6px">
+      <span class="material-symbols-outlined" style="color:var(--muted);font-size:18px">list_alt</span>
+      Dernières Inférences
+    </h3>
+    <div class="glass-panel" style="border-radius:12px;overflow:hidden">
+      <div style="overflow-x:auto">
+        <table class="data-table">
+          <thead><tr>
             <th>Horodatage</th><th>Machine</th><th>Diagnostic</th>
             <th>MSE</th><th>Sévérité</th><th>Statut</th>
-          </tr>
-        </thead>
-        <tbody id="hist-tbody"></tbody>
-      </table>
+          </tr></thead>
+          <tbody id="hist-tbody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
   <!-- ══ TAB: DIAGNOSTIC BATCH ══ -->
   <div class="tab-content" id="tab-batch">
-    <h2 style="font-size:1.4rem;font-weight:800;margin-bottom:16px">Diagnostic Batch</h2>
+    <h2 style="font-size:22px;font-weight:800;margin-bottom:20px">Diagnostic Batch</h2>
 
-    <div class="batch-setup">
-      <h3>Paramètres d'Analyse</h3>
-      <div class="batch-fields">
-        <div class="field-group">
-          <label>Type de défaut à analyser</label>
-          <select id="batch-fault">
+    <!-- Analysis Parameters -->
+    <div class="glass-panel" style="border-radius:14px;padding:24px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
+        <span class="material-symbols-outlined" style="font-size:22px;color:var(--cyan);font-variation-settings:'FILL' 1">tune</span>
+        <h3 style="font-size:18px;font-weight:700;color:var(--text)">Paramètres d'Analyse</h3>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5" style="align-items:end">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">Type de défaut</label>
+          <select id="batch-fault" class="industrial-input" style="cursor:pointer">
             <option value="normal">Normal (Référence)</option>
             <option value="ball_007">Bille — 0.007" (Ball)</option>
             <option value="ball_014">Bille — 0.014" (Ball)</option>
@@ -293,38 +457,43 @@
             <option value="or_021">Bague extérieure — 0.021" (OR)</option>
           </select>
         </div>
-        <div class="field-group">
-          <label>Nombre de fenêtres max</label>
-          <input type="number" id="batch-windows" value="100" min="10" max="500">
+        <div>
+          <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:8px">Nombre de fenêtres max</label>
+          <input type="number" id="batch-windows" value="100" min="10" max="500" class="industrial-input" style="text-align:right;font-family:'Geist Mono',monospace">
         </div>
-        <button class="btn btn-blue" id="batch-btn" onclick="runBatch()" style="width:130px;padding:10px">
-          🔬 Analyser
+        <button class="btn btn-cyan" id="batch-btn" onclick="runBatch()" style="height:46px;font-size:14px">
+          <span style="font-size:18px">🔬</span> Analyser
         </button>
       </div>
     </div>
 
     <!-- Results (hidden until run) -->
     <div class="batch-results" id="batch-results">
+      <!-- KPIs -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4" id="batch-kpi" style="margin-bottom:20px"></div>
 
-      <div class="batch-kpi" id="batch-kpi"></div>
-
-      <div class="batch-charts">
-        <div class="hist-chart">
-          <div id="batch-mse-chart" style="height:220px"></div>
+      <!-- Charts -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5" style="margin-bottom:20px">
+        <div class="glass-panel" style="border-radius:12px;padding:6px">
+          <div id="batch-mse-chart" style="height:260px"></div>
         </div>
-        <div class="hist-chart">
-          <div id="batch-sev-chart" style="height:220px"></div>
+        <div class="glass-panel" style="border-radius:12px;padding:6px">
+          <div id="batch-sev-chart" style="height:260px"></div>
         </div>
       </div>
 
-      <div class="batch-class-table">
-        <h4>Distribution des Prédictions</h4>
+      <!-- Distribution -->
+      <div class="glass-panel" style="border-radius:12px;padding:20px">
+        <h4 style="font-size:16px;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px">
+          <span class="material-symbols-outlined" style="font-size:20px;color:var(--cyan)">donut_large</span>
+          Distribution des Prédictions
+        </h4>
         <div id="class-dist"></div>
       </div>
     </div>
   </div>
 
-</div><!-- /main -->
+</div><!-- /main-area -->
 
 <script>
 // ══════════════════════════════════════════════════════════════
@@ -332,10 +501,10 @@
 // ══════════════════════════════════════════════════════════════
 const API = 'http://localhost:8000';
 const MACHINES = [
-  {id:'machine_1', name:'Pompe P-01',       icon:'💧'},
-  {id:'machine_2', name:'Ventilateur V-02', icon:'🌀'},
-  {id:'machine_3', name:'Compresseur C-03', icon:'⚙️'},
-  {id:'machine_4', name:'Convoyeur T-04',   icon:'📦'},
+  {id:'machine_1', name:'Pompe P-01',       icon:'water_drop',      zone:'Zone A — Liquides'},
+  {id:'machine_2', name:'Ventilateur V-02', icon:'air',              zone:'Zone B — Aération'},
+  {id:'machine_3', name:'Compresseur C-03', icon:'settings_suggest', zone:'Zone C — Pression'},
+  {id:'machine_4', name:'Convoyeur T-04',   icon:'local_shipping',   zone:'Zone D — Logistique'},
 ];
 const FAULT_OPTIONS = [
   ['normal','Normal'],['ball_007','Ball 0.007"'],['ball_014','Ball 0.014"'],
@@ -348,16 +517,187 @@ let running = false, timers = {}, startTime = null, uptimeInterval = null;
 let globalInf = 0, globalAnom = 0;
 const mseHistory = {machine_1:[],machine_2:[],machine_3:[],machine_4:[]};
 const maxMSE = 80;
+const machineState = {}; // tracks per-machine anomaly state
+MACHINES.forEach(m => machineState[m.id] = {isAnom:false, severity:0});
 
 // ══════════════════════════════════════════════════════════════
-//  TABS
+//  SESSION PERSISTENCE (localStorage)
+// ══════════════════════════════════════════════════════════════
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem('vibae-settings'));
+    if (!s) return;
+    if (s.freq) {
+      document.getElementById('freq-slider').value = s.freq;
+      document.getElementById('freq-val').textContent = s.freq + ' ms';
+    }
+    if (s.chunk) {
+      document.getElementById('chunk-slider').value = s.chunk;
+      document.getElementById('chunk-val').textContent = s.chunk;
+    }
+  } catch(e) {}
+}
+function saveSettings() {
+  localStorage.setItem('vibae-settings', JSON.stringify({
+    freq: document.getElementById('freq-slider').value,
+    chunk: document.getElementById('chunk-slider').value,
+  }));
+}
+document.getElementById('freq-slider').addEventListener('change', saveSettings);
+document.getElementById('chunk-slider').addEventListener('change', saveSettings);
+
+// ══════════════════════════════════════════════════════════════
+//  TOAST NOTIFICATION SYSTEM
+// ══════════════════════════════════════════════════════════════
+function showToast(message, type='info', duration=5000) {
+  const container = document.getElementById('toast-container');
+  const icons = {anomaly:'warning', info:'check_circle', warn:'trending_up'};
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+  toast.innerHTML = `
+    <span class="material-symbols-outlined">${icons[type]||'info'}</span>
+    <span style="flex:1">${message}</span>
+    <span class="material-symbols-outlined toast-close" onclick="this.parentElement.classList.add('removing');setTimeout(()=>this.parentElement.remove(),350)">close</span>`;
+  container.appendChild(toast);
+  // Limit to 5 toasts max
+  while (container.children.length > 5) container.removeChild(container.firstChild);
+  setTimeout(() => {
+    if (toast.parentElement) {
+      toast.classList.add('removing');
+      setTimeout(() => toast.remove(), 350);
+    }
+  }, duration);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  AUDIO ALERT (Web Audio API — no external files)
+// ══════════════════════════════════════════════════════════════
+let audioCtx = null;
+function playAlertSound() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.15);
+    gain.gain.setValueAtTime(0.12, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.4);
+    osc.start(audioCtx.currentTime);
+    osc.stop(audioCtx.currentTime + 0.4);
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ANIMATED COUNTER
+// ══════════════════════════════════════════════════════════════
+function animateCounter(el, newVal) {
+  if (el.textContent === String(newVal)) return;
+  el.textContent = newVal;
+  el.classList.add('bump');
+  setTimeout(() => el.classList.remove('bump'), 180);
+}
+
+// ══════════════════════════════════════════════════════════════
+//  CONNECTION STATUS INDICATOR
+// ══════════════════════════════════════════════════════════════
+let connOk = false;
+async function checkConnection() {
+  const el = document.getElementById('conn-indicator');
+  try {
+    const r = await fetch(`${API}/health`, {signal: AbortSignal.timeout(3000)});
+    if (r.ok || r.status === 404) {
+      // 404 is fine — means server is running, just no /health endpoint
+      if (!connOk) {
+        connOk = true;
+        el.className = 'conn-indicator connected';
+        el.innerHTML = '<span class="conn-dot"></span> En ligne';
+      }
+    } else throw new Error();
+  } catch(e) {
+    // Try a simpler endpoint
+    try {
+      const r2 = await fetch(`${API}/docs`, {signal: AbortSignal.timeout(3000)});
+      if (!connOk) {
+        connOk = true;
+        el.className = 'conn-indicator connected';
+        el.innerHTML = '<span class="conn-dot"></span> En ligne';
+      }
+    } catch(e2) {
+      if (connOk) {
+        connOk = false;
+        el.className = 'conn-indicator disconnected';
+        el.innerHTML = '<span class="conn-dot"></span> Hors ligne';
+        showToast('Connexion au serveur perdue', 'anomaly');
+      }
+    }
+  }
+}
+setInterval(checkConnection, 5000);
+checkConnection();
+
+// ══════════════════════════════════════════════════════════════
+//  HEALTH SUMMARY BAR
+// ══════════════════════════════════════════════════════════════
+function buildHealthBar() {
+  const bar = document.getElementById('health-bar');
+  bar.innerHTML = MACHINES.map(m => `
+    <div class="health-chip" id="health-${m.id}">
+      <span class="health-dot ok" id="hdot-${m.id}"></span>
+      <span class="health-name">${m.name}</span>
+      <span class="health-status" id="hstatus-${m.id}" style="color:var(--green)">SAIN</span>
+    </div>`).join('');
+}
+function updateHealthChip(mid, severity, isAnom) {
+  const dot = document.getElementById(`hdot-${mid}`);
+  const status = document.getElementById(`hstatus-${mid}`);
+  const chip = document.getElementById(`health-${mid}`);
+  if (!dot) return;
+  if (severity >= 75 || isAnom) {
+    dot.className = 'health-dot critical';
+    status.textContent = 'CRITIQUE';
+    status.style.color = 'var(--red-vivid)';
+    chip.style.borderColor = 'rgba(255,82,82,.3)';
+  } else if (severity >= 50) {
+    dot.className = 'health-dot warn';
+    status.textContent = 'SURVEILLER';
+    status.style.color = 'var(--amber)';
+    chip.style.borderColor = 'rgba(255,170,0,.2)';
+  } else {
+    dot.className = 'health-dot ok';
+    status.textContent = 'SAIN';
+    status.style.color = 'var(--green)';
+    chip.style.borderColor = 'var(--border-subtle)';
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+//  TABS (sidebar navigation)
 // ══════════════════════════════════════════════════════════════
 function switchTab(id, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('tab-' + id).classList.add('active');
-  if (id === 'hist') loadHistory();
+  // Fade out current tab
+  const current = document.querySelector('.tab-content.active');
+  if (current) {
+    current.style.opacity = '0';
+    current.style.transform = 'translateY(8px)';
+  }
+  // Update nav
+  document.querySelectorAll('.nav-link').forEach(t => t.classList.remove('active'));
+  if (el) el.classList.add('active');
+  // Switch after brief delay for animation
+  setTimeout(() => {
+    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    const target = document.getElementById('tab-' + id);
+    target.classList.add('active');
+    // Force reflow then animate in
+    requestAnimationFrame(() => {
+      target.style.opacity = '1';
+      target.style.transform = 'translateY(0)';
+    });
+    if (id === 'hist') loadHistory();
+  }, current ? 150 : 0);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -370,81 +710,93 @@ function buildCards() {
     const faultOpts = FAULT_OPTIONS.map(([v,l]) =>
       `<option value="${v}">${l}</option>`).join('');
     grid.innerHTML += `
-    <div class="machine-card" id="card-${m.id}">
-      <div class="card-header">
-        <div class="card-name">${m.icon} ${m.name}</div>
-        <div class="card-badge ok" id="badge-${m.id}">OK</div>
+    <div class="glass-panel machine-card" style="border-radius:14px;padding:18px;display:flex;flex-direction:column;gap:10px" id="card-${m.id}">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:start">
+        <div>
+          <div style="font-size:17px;font-weight:700;display:flex;align-items:center;gap:6px">
+            <span class="material-symbols-outlined" style="font-size:20px;color:var(--cyan);font-variation-settings:'FILL' 1">${m.icon}</span>
+            ${m.name}
+          </div>
+          <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-top:2px">${m.zone}</div>
+        </div>
+        <div class="card-badge ok" id="badge-${m.id}">
+          <span class="material-symbols-outlined" style="font-size:14px">check_circle</span> OK
+        </div>
       </div>
 
-      <div class="fault-row">
-        <span style="font-size:.74rem;color:var(--muted);white-space:nowrap">Injecter défaut :</span>
-        <select id="fault-${m.id}" onchange="setFault('${m.id}',this.value)">
+      <!-- Fault injection -->
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--muted);white-space:nowrap">Injecter défaut :</span>
+        <select id="fault-${m.id}" onchange="setFault('${m.id}',this.value)"
+                style="flex:1;background:#000;border:1px solid var(--surface-variant);color:var(--text);padding:4px 8px;border-radius:6px;font-family:'Geist',sans-serif;font-size:12px;outline:none;cursor:pointer;transition:border-color .2s"
+                onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--surface-variant)'">
           ${faultOpts}
         </select>
       </div>
 
       <!-- Severity bar -->
-      <div>
-        <div class="sev-row">
-          <span class="sev-label">Sévérité</span>
-          <div class="sev-bar-bg"><div class="sev-bar-fill" id="sev-fill-${m.id}" style="width:0%;background:var(--green)"></div></div>
-          <span class="sev-score" id="sev-score-${m.id}" style="color:var(--green)">0</span>
-          <span class="sev-zone" id="sev-zone-${m.id}" style="background:rgba(0,255,102,.1);color:var(--green)">Sain</span>
-        </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:11px;color:var(--muted);width:52px;flex-shrink:0">Sévérité</span>
+        <div class="sev-bar-bg"><div class="sev-bar-fill" id="sev-fill-${m.id}" style="width:0%;background:var(--green)"></div></div>
+        <span style="font-size:14px;font-weight:700;width:28px;text-align:right;font-family:'Geist Mono',monospace" id="sev-score-${m.id}" class="sev-score">0</span>
+        <span class="sev-zone" id="sev-zone-${m.id}" style="background:rgba(107,255,131,.1);color:var(--green)">Sain</span>
       </div>
 
-      <!-- Metrics -->
-      <div class="metrics-row">
-        <div class="metric"><div class="metric-val" id="mse-${m.id}">—</div><div class="metric-lbl">MSE</div></div>
-        <div class="metric"><div class="metric-val" id="rms-${m.id}">—</div><div class="metric-lbl">RMS</div></div>
-        <div class="metric"><div class="metric-val" id="kurt-${m.id}">—</div><div class="metric-lbl">Kurtosis</div></div>
-        <div class="metric"><div class="metric-val" id="fft-${m.id}">—</div><div class="metric-lbl">Pic FFT (Hz)</div></div>
+      <!-- Metrics row -->
+      <div class="grid grid-cols-4 gap-2">
+        <div class="metric-tile"><div class="metric-val" id="mse-${m.id}">—</div><div class="metric-lbl">MSE</div></div>
+        <div class="metric-tile"><div class="metric-val" id="rms-${m.id}">—</div><div class="metric-lbl">RMS</div></div>
+        <div class="metric-tile"><div class="metric-val" id="kurt-${m.id}">—</div><div class="metric-lbl">Kurtosis</div></div>
+        <div class="metric-tile"><div class="metric-val" id="fft-${m.id}">—</div><div class="metric-lbl">Pic FFT</div></div>
       </div>
 
       <!-- Trend -->
       <div class="trend-row" id="trend-${m.id}">
-        <span class="trend-icon">→</span>
-        <span class="trend-label">En attente de données...</span>
+        <span style="font-size:16px">→</span>
+        <span style="color:var(--muted)">En attente de données...</span>
       </div>
 
       <!-- Diagnosis -->
-      <div style="font-size:.8rem;color:var(--muted)">
-        Diagnostic : <span id="diag-${m.id}" style="font-weight:700;color:var(--cyan)">—</span>
+      <div style="font-size:13px;color:var(--muted)">
+        Diagnostic : <span style="font-weight:700;color:var(--cyan);font-family:'Geist Mono',monospace" id="diag-${m.id}">—</span>
       </div>
 
-      <!-- Charts -->
-      <div class="charts-grid">
-        <div class="chart-box"><div class="chart-title">Signal</div><div id="sig-${m.id}" style="height:90px"></div></div>
-        <div class="chart-box"><div class="chart-title">FFT</div><div id="fft-chart-${m.id}" style="height:90px"></div></div>
-        <div class="chart-box"><div class="chart-title">Spectrogramme</div><div id="spec-${m.id}" style="height:90px"></div></div>
-        <div class="chart-box"><div class="chart-title">MSE Historique</div><div id="mse-chart-${m.id}" style="height:90px"></div></div>
+      <!-- 2×2 Charts -->
+      <div class="grid grid-cols-2 gap-2">
+        <div class="chart-box"><div class="chart-title">Signal</div><div id="sig-${m.id}" style="height:100px"></div></div>
+        <div class="chart-box"><div class="chart-title">FFT</div><div id="fft-chart-${m.id}" style="height:100px"></div></div>
+        <div class="chart-box"><div class="chart-title">Spectrogramme</div><div id="spec-${m.id}" style="height:100px"></div></div>
+        <div class="chart-box"><div class="chart-title">MSE Historique</div><div id="mse-chart-${m.id}" style="height:100px"></div></div>
       </div>
     </div>`;
   });
-
-  // Init empty Plotly charts
   MACHINES.forEach(m => initCharts(m.id));
 }
 
+// ══════════════════════════════════════════════════════════════
+//  PLOTLY CONFIG
+// ══════════════════════════════════════════════════════════════
 const PLOTLY_LAYOUT = (extra={}) => Object.assign({
-  margin:{t:4,b:24,l:30,r:10}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
-  font:{color:'#a0aec0',size:9},
-  xaxis:{color:'#4a5568',gridcolor:'#1f2736',zeroline:false,showline:false},
-  yaxis:{color:'#4a5568',gridcolor:'#1f2736',zeroline:false,showline:false},
+  margin:{t:4,b:20,l:28,r:8}, paper_bgcolor:'transparent', plot_bgcolor:'transparent',
+  font:{color:'#8a9a87',size:9,family:'Geist Mono'},
+  xaxis:{color:'#3b4b3a',gridcolor:'rgba(49,52,66,.5)',zeroline:false,showline:false},
+  yaxis:{color:'#3b4b3a',gridcolor:'rgba(49,52,66,.5)',zeroline:false,showline:false},
   showlegend:false,
 }, extra);
 
 const PLOTLY_CFG = {displayModeBar:false, responsive:true};
+const PLOTLY_CFG_INTERACTIVE = {displayModeBar:'hover', responsive:true, modeBarButtonsToRemove:['toImage','sendDataToCloud']};
 
 function initCharts(mid) {
   const blank = {x:[],y:[]};
-  Plotly.newPlot(`sig-${mid}`, [{...blank,type:'scatter',line:{color:'#00B8FF',width:1}}], PLOTLY_LAYOUT(), PLOTLY_CFG);
-  Plotly.newPlot(`fft-chart-${mid}`, [{...blank,type:'scatter',line:{color:'#00FF66',width:1},fill:'tozeroy',fillcolor:'rgba(0,255,102,0.05)'}], PLOTLY_LAYOUT(), PLOTLY_CFG);
+  Plotly.newPlot(`sig-${mid}`, [{...blank,type:'scatter',line:{color:'#84cfff',width:1}}], PLOTLY_LAYOUT(), PLOTLY_CFG);
+  Plotly.newPlot(`fft-chart-${mid}`, [{...blank,type:'scatter',line:{color:'#6bff83',width:1},fill:'tozeroy',fillcolor:'rgba(107,255,131,0.05)'}], PLOTLY_LAYOUT(), PLOTLY_CFG);
   Plotly.newPlot(`spec-${mid}`, [{z:[],type:'heatmap',colorscale:'Viridis',showscale:false}], PLOTLY_LAYOUT(), PLOTLY_CFG);
   Plotly.newPlot(`mse-chart-${mid}`, [
-    {x:[],y:[],type:'scatter',line:{color:'#00B8FF',width:1.5},name:'MSE'},
-    {x:[null],y:[null],type:'scatter',mode:'lines',line:{color:'#FF3366',dash:'dash',width:1.5},name:'Seuil'}
-  ], PLOTLY_LAYOUT({yaxis:{range:[0,0.15],color:'#4a5568',gridcolor:'#1f2736'}}), PLOTLY_CFG);
+    {x:[],y:[],type:'scatter',line:{color:'#84cfff',width:1.5},name:'MSE'},
+    {x:[null],y:[null],type:'scatter',mode:'lines',line:{color:'#ffb4ab',dash:'dash',width:1.5},name:'Seuil'}
+  ], PLOTLY_LAYOUT({yaxis:{range:[0,0.15],color:'#3b4b3a',gridcolor:'rgba(49,52,66,.5)'}}), PLOTLY_CFG);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -453,14 +805,14 @@ function initCharts(mid) {
 function sevColor(s) {
   if (s < 30) return 'var(--green)';
   if (s < 50) return 'var(--cyan)';
-  if (s < 75) return 'var(--orange)';
+  if (s < 75) return 'var(--amber)';
   return 'var(--red)';
 }
 function sevZone(s) {
-  if (s < 30) return ['Sain','rgba(0,255,102,.1)','var(--green)'];
-  if (s < 50) return ['Surveiller','rgba(0,184,255,.1)','var(--cyan)'];
-  if (s < 75) return ['Anomalie','rgba(255,153,0,.1)','var(--orange)'];
-  return ['Critique','rgba(255,51,102,.1)','var(--red)'];
+  if (s < 30) return ['Sain','rgba(107,255,131,.1)','var(--green)'];
+  if (s < 50) return ['Surveiller','rgba(132,207,255,.1)','var(--cyan)'];
+  if (s < 75) return ['Anomalie','rgba(255,170,0,.1)','var(--amber)'];
+  return ['Critique','rgba(255,180,171,.12)','var(--red)'];
 }
 function updateSeverity(mid, score) {
   const fill  = document.getElementById(`sev-fill-${mid}`);
@@ -468,13 +820,13 @@ function updateSeverity(mid, score) {
   const zone  = document.getElementById(`sev-zone-${mid}`);
   const c     = sevColor(score);
   const [zl,zbg,zc] = sevZone(score);
-  fill.style.width   = score + '%';
+  fill.style.width      = score + '%';
   fill.style.background = c;
-  sc.textContent     = Math.round(score);
-  sc.style.color     = c;
+  sc.textContent  = Math.round(score);
+  sc.style.color  = c;
   zone.textContent   = zl;
   zone.style.background = zbg;
-  zone.style.color   = zc;
+  zone.style.color      = zc;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -488,8 +840,8 @@ function updateTrendUI(mid, trend) {
   const colors = {rising:'var(--red)', stable:'var(--muted)', falling:'var(--green)'};
   const alertHtml = trend.alert ? '<span class="trend-alert">⚠ ALERTE DÉGRADATION</span>' : '';
   row.innerHTML = `
-    <span class="trend-icon" style="color:${colors[dir]}">${icons[dir]}</span>
-    <span class="trend-label" style="color:${colors[dir]}">${labels[dir]}</span>
+    <span style="font-size:16px;color:${colors[dir]}">${icons[dir]}</span>
+    <span style="color:${colors[dir]}">${labels[dir]}</span>
     ${alertHtml}`;
 }
 
@@ -528,8 +880,23 @@ async function pollMachine(mid) {
       globalInf++;
       if (r.is_anomaly) globalAnom++;
       updateCard(mid, r, samples);
-      document.getElementById('cnt-inf').textContent  = globalInf;
-      document.getElementById('cnt-anom').textContent = globalAnom;
+      animateCounter(document.getElementById('cnt-inf'), globalInf);
+      animateCounter(document.getElementById('cnt-anom'), globalAnom);
+
+      // Toast + audio on NEW anomaly detection
+      const prevAnom = machineState[mid].isAnom;
+      machineState[mid].isAnom = r.is_anomaly;
+      machineState[mid].severity = r.severity_score;
+      if (r.is_anomaly && !prevAnom) {
+        showToast(`⚠ ${MACH_NAMES[mid]} — Anomalie détectée : ${r.predicted_fault}`, 'anomaly');
+        if (r.severity_score >= 75) playAlertSound();
+      }
+      // Toast on degradation alert
+      if (r.trend && r.trend.alert) {
+        showToast(`📈 ${MACH_NAMES[mid]} — Dégradation en cours`, 'warn');
+      }
+      // Update health bar
+      updateHealthChip(mid, r.severity_score, r.is_anomaly);
     }
   } catch(e) { /* network hiccup, ignore */ }
 }
@@ -537,10 +904,23 @@ async function pollMachine(mid) {
 function updateCard(mid, r, samples) {
   const isAnom = r.is_anomaly;
   const card = document.getElementById(`card-${mid}`);
-  card.classList.toggle('anomaly', isAnom);
+
+  // Card glow
+  if (isAnom) {
+    card.classList.add('glow-red');
+  } else {
+    card.classList.remove('glow-red');
+  }
+
+  // Badge
   const badge = document.getElementById(`badge-${mid}`);
-  badge.textContent = isAnom ? '⚠ ANOMALIE' : '✓ OK';
-  badge.className = `card-badge ${isAnom ? 'anomaly' : 'ok'}`;
+  if (isAnom) {
+    badge.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">warning</span> ANOMALIE';
+    badge.className = 'card-badge anomaly';
+  } else {
+    badge.innerHTML = '<span class="material-symbols-outlined" style="font-size:14px">check_circle</span> OK';
+    badge.className = 'card-badge ok';
+  }
 
   // Metrics
   document.getElementById(`mse-${mid}`).textContent   = r.mse.toFixed(5);
@@ -566,13 +946,13 @@ function updateCard(mid, r, samples) {
   // Charts
   const xs = Array.from({length:samples.length},(_,i)=>i);
   Plotly.react(`sig-${mid}`,
-    [{x:xs, y:samples, type:'scatter', line:{color:'#00B8FF',width:1}}],
+    [{x:xs, y:samples, type:'scatter', line:{color:'#84cfff',width:1}}],
     PLOTLY_LAYOUT(), PLOTLY_CFG);
 
   if (r.fft_freqs && r.fft_amplitudes) {
     Plotly.react(`fft-chart-${mid}`,
       [{x:r.fft_freqs, y:r.fft_amplitudes, type:'scatter',
-        line:{color:'#00FF66',width:1},fill:'tozeroy',fillcolor:'rgba(0,255,102,0.05)'}],
+        line:{color:'#6bff83',width:1},fill:'tozeroy',fillcolor:'rgba(107,255,131,0.05)'}],
       PLOTLY_LAYOUT(), PLOTLY_CFG);
   }
 
@@ -585,11 +965,11 @@ function updateCard(mid, r, samples) {
   const mseXs = Array.from({length:mseHistory[mid].length},(_,i)=>i);
   Plotly.react(`mse-chart-${mid}`,
     [
-      {x:mseXs, y:mseHistory[mid], type:'scatter', line:{color:'#00B8FF',width:1.5}, name:'MSE'},
+      {x:mseXs, y:mseHistory[mid], type:'scatter', line:{color:'#84cfff',width:1.5}, name:'MSE'},
       {x:[0, mseHistory[mid].length-1], y:[r.threshold, r.threshold], type:'scatter', mode:'lines',
-       line:{color:'#FF3366', dash:'dash', width:1.5}, name:'Seuil'}
+       line:{color:'#ffb4ab', dash:'dash', width:1.5}, name:'Seuil'}
     ],
-    PLOTLY_LAYOUT({yaxis:{range:[0, Math.max(r.threshold*2, 0.1)],color:'#4a5568',gridcolor:'#1f2736'}}),
+    PLOTLY_LAYOUT({yaxis:{range:[0, Math.max(r.threshold*2, 0.1)],color:'#3b4b3a',gridcolor:'rgba(49,52,66,.5)'}}),
     PLOTLY_CFG);
 }
 
@@ -602,8 +982,11 @@ function startMonitoring() {
   startTime = Date.now();
   document.getElementById('btn-start').disabled = true;
   document.getElementById('btn-stop').disabled  = false;
-  document.getElementById('status-badge').textContent = '● En cours';
-  document.getElementById('status-badge').className   = 'badge on';
+  const badge = document.getElementById('status-badge');
+  badge.innerHTML = '<span class="pulse-dot"></span> En cours';
+  badge.className = 'status-badge on';
+
+  showToast('Surveillance démarrée — 4 machines actives', 'info');
 
   MACHINES.forEach(m => {
     const freq = parseInt(document.getElementById('freq-slider').value);
@@ -625,8 +1008,11 @@ function stopMonitoring() {
   clearInterval(uptimeInterval);
   document.getElementById('btn-start').disabled = false;
   document.getElementById('btn-stop').disabled  = true;
-  document.getElementById('status-badge').textContent = '● Arrêté';
-  document.getElementById('status-badge').className   = 'badge off';
+  const badge = document.getElementById('status-badge');
+  badge.innerHTML = '● Arrêté';
+  badge.className = 'status-badge off';
+
+  showToast('Surveillance arrêtée', 'info');
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -656,10 +1042,11 @@ async function loadHistory() {
     const mseD = await (await fetch(`${API}/history/mse-series?machine_id=${mseM}&last_n=50`)).json();
     const xs = Array.from({length:mseD.series.length},(_,i)=>i);
     Plotly.react('hist-mse-chart',
-      [{x:xs, y:mseD.series, type:'scatter', line:{color:'#00B8FF',width:1.5}, name:'MSE'}],
+      [{x:xs, y:mseD.series, type:'scatter', line:{color:'#84cfff',width:1.5}, name:'MSE',
+        fill:'tozeroy', fillcolor:'rgba(132,207,255,0.05)'}],
       Object.assign(PLOTLY_LAYOUT(), {
-        title:{text:`MSE — ${MACH_NAMES[mseM]||mseM}`,font:{color:'#a0aec0',size:11}},
-        height:200
+        title:{text:`Tendance MSE — ${MACH_NAMES[mseM]||mseM}`,font:{color:'#b9ccb5',size:12,family:'Geist'}},
+        height:220, margin:{t:30,b:24,l:36,r:12}
       }), PLOTLY_CFG);
   } catch(e) {}
 
@@ -668,17 +1055,25 @@ async function loadHistory() {
     const alerts = await (await fetch(`${API}/history/alerts?limit=10`)).json();
     const list = document.getElementById('alerts-list');
     if (!alerts.length) {
-      list.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:8px">Aucune alerte enregistrée.</div>';
+      list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px" class="glass-panel" style="border-radius:8px">Aucune alerte enregistrée.</div>';
     } else {
-      list.innerHTML = alerts.map(a => `
-        <div class="alert-item">
+      list.innerHTML = alerts.map(a => {
+        const sc = a.severity_score||0;
+        const sevC = sc>=75?'var(--red)':sc>=50?'var(--amber)':'var(--cyan)';
+        const sevL = sc>=75?'CRITIQUE':sc>=50?'MODÉRÉ':'LÉGER';
+        const sevBg = sc>=75?'rgba(255,180,171,.12)':sc>=50?'rgba(255,170,0,.12)':'rgba(132,207,255,.12)';
+        return `
+        <div class="alert-item" style="border-left-color:${sevC}">
           <div>
-            <div class="al-machine">${MACH_NAMES[a.machine_id]||a.machine_id}</div>
-            <div class="al-fault">${a.predicted_fault||'—'}</div>
+            <div style="font-weight:700;font-size:14px">${MACH_NAMES[a.machine_id]||a.machine_id}</div>
+            <div style="color:${sevC};font-size:13px;font-family:'Geist Mono',monospace;margin-top:2px">${a.predicted_fault||'—'}</div>
           </div>
-          <div class="al-time">${(a.timestamp||'').replace('T',' ').slice(0,19)}</div>
-          <div class="al-sev" style="color:${sevColor(a.severity_score||0)}">${(a.severity_score||0).toFixed(0)}/100</div>
-        </div>`).join('');
+          <div style="text-align:right">
+            <div style="color:var(--dim);font-size:11px;font-family:'Geist Mono',monospace">${(a.timestamp||'').replace('T',' ').slice(0,19)}</div>
+            <span class="alert-sev" style="background:${sevBg};color:${sevC};margin-top:4px;display:inline-block">${sevL}</span>
+          </div>
+        </div>`;
+      }).join('');
     }
   } catch(e) {}
 
@@ -690,17 +1085,15 @@ async function loadHistory() {
     const infs = await (await fetch(infUrl)).json();
     const tbody = document.getElementById('hist-tbody');
     if (!infs.length) {
-      tbody.innerHTML = `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:16px">Aucune inférence enregistrée.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:20px">Aucune inférence enregistrée.</td></tr>`;
     } else {
       tbody.innerHTML = infs.map(r => `
         <tr>
           <td>${(r.timestamp||'').replace('T',' ').slice(0,19)}</td>
-          <td>${MACH_NAMES[r.machine_id]||r.machine_id}</td>
-          <td style="color:${r.is_anomaly?'var(--red)':'var(--green)'}">${r.predicted_fault||'—'}</td>
+          <td style="color:var(--muted)">${MACH_NAMES[r.machine_id]||r.machine_id}</td>
+          <td style="color:${r.is_anomaly?'var(--red)':'var(--green)'};font-weight:600">${r.predicted_fault||'—'}</td>
           <td>${r.mse!=null?r.mse.toFixed(5):'—'}</td>
-          <td>
-            <span style="color:${sevColor(r.severity_score||0)}">${(r.severity_score||0).toFixed(1)}</span>
-          </td>
+          <td style="color:${sevColor(r.severity_score||0)};font-weight:600">${(r.severity_score||0).toFixed(1)}</td>
           <td><span class="pill ${r.is_anomaly?'pill-anomaly':'pill-ok'}">${r.is_anomaly?'Anomalie':'Normal'}</span></td>
         </tr>`).join('');
     }
@@ -727,52 +1120,59 @@ async function runBatch() {
 
     // KPIs
     const kpiData = [
-      {val:(d.accuracy*100).toFixed(1)+'%', lbl:'Précision',         color:'var(--green)'},
-      {val:(d.anomaly_rate*100).toFixed(1)+'%', lbl:'Taux Anomalie', color:d.anomaly_rate>.5?'var(--red)':'var(--orange)'},
-      {val:d.mean_severity.toFixed(1),      lbl:'Sévérité Moy.',     color:sevColor(d.mean_severity)},
-      {val:d.majority_prediction,           lbl:'Prédiction Majeure',color:'var(--cyan)'},
+      {val:(d.accuracy*100).toFixed(1)+'%', lbl:'Précision Globale', color:'var(--green)', icon:'check_circle'},
+      {val:(d.anomaly_rate*100).toFixed(1)+'%', lbl:"Taux d'Anomalie", color:d.anomaly_rate>.5?'var(--red)':'var(--amber)', icon:'warning'},
+      {val:d.mean_severity.toFixed(1), lbl:'Sévérité Moyenne', color:sevColor(d.mean_severity), icon:'speed'},
+      {val:d.majority_prediction, lbl:'Prédiction Majeure', color:'var(--cyan)', icon:'insights'},
     ];
     document.getElementById('batch-kpi').innerHTML = kpiData.map(k => `
-      <div class="kpi-card">
-        <div class="kpi-val" style="color:${k.color}">${k.val}</div>
-        <div class="kpi-lbl">${k.lbl}</div>
+      <div class="glass-card" style="border-radius:14px;padding:18px;position:relative;overflow:hidden">
+        <div style="position:absolute;right:-8px;top:-8px;width:60px;height:60px;background:${k.color};opacity:.08;border-radius:50%;filter:blur(16px)"></div>
+        <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:12px">
+          <span style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">${k.lbl}</span>
+          <span class="material-symbols-outlined" style="font-size:20px;color:${k.color};background:rgba(255,255,255,.05);padding:4px;border-radius:6px;font-variation-settings:'FILL' 1">${k.icon}</span>
+        </div>
+        <div style="font-size:28px;font-weight:800;color:${k.color};font-family:'Geist Mono',monospace;filter:drop-shadow(0 0 8px ${k.color}40)">${k.val}</div>
       </div>`).join('');
 
     // MSE chart
     Plotly.react('batch-mse-chart',
       [
         {x:d.window_indices, y:d.mse_values, type:'scatter',
-         line:{color:'#00B8FF',width:1.2}, name:'MSE'},
+         line:{color:'#84cfff',width:1.2}, name:'MSE'},
         {x:[0,d.window_indices.length-1], y:[d.threshold,d.threshold],
-         type:'scatter', mode:'lines', line:{color:'#FF3366',dash:'dash',width:1.5}, name:'Seuil'}
+         type:'scatter', mode:'lines', line:{color:'#ffb4ab',dash:'dash',width:1.5}, name:'Seuil'}
       ],
       Object.assign(PLOTLY_LAYOUT(), {
-        title:{text:'MSE par Fenêtre',font:{color:'#a0aec0',size:11}}, height:220
+        title:{text:'MSE par Fenêtre',font:{color:'#b9ccb5',size:12,family:'Geist'}},
+        height:260, margin:{t:30,b:24,l:36,r:12}
       }), PLOTLY_CFG);
 
     // Severity chart
     Plotly.react('batch-sev-chart',
       [{x:d.window_indices, y:d.severity_values, type:'scatter',
-        line:{color:'#FFB700',width:1.2}, fill:'tozeroy', fillcolor:'rgba(255,183,0,0.05)', name:'Sévérité'}],
+        line:{color:'#ffd500',width:1.2}, fill:'tozeroy', fillcolor:'rgba(255,213,0,0.05)', name:'Sévérité'}],
       Object.assign(PLOTLY_LAYOUT(), {
-        title:{text:'Score Sévérité',font:{color:'#a0aec0',size:11}},
-        height:220, yaxis:{range:[0,100],color:'#4a5568',gridcolor:'#1f2736'}
+        title:{text:'Score Sévérité',font:{color:'#b9ccb5',size:12,family:'Geist'}},
+        height:260, margin:{t:30,b:24,l:36,r:12},
+        yaxis:{range:[0,100],color:'#3b4b3a',gridcolor:'rgba(49,52,66,.5)'}
       }), PLOTLY_CFG);
 
     // Class distribution
     const total = Object.values(d.class_counts).reduce((a,b)=>a+b,0);
     const sorted = Object.entries(d.class_counts).sort((a,b)=>b[1]-a[1]);
-    document.getElementById('class-dist').innerHTML = sorted.map(([cls,cnt]) => `
-      <div class="class-row">
-        <span style="width:130px;font-size:.82rem">${cls}</span>
-        <div class="class-bar-bg"><div class="class-bar-fill" style="width:${(cnt/total*100).toFixed(1)}%"></div></div>
-        <span class="class-count">${cnt}</span>
+    const barColors = ['#84cfff','#6bff83','#ffb4ab','#ffd500','#00b6fd','#ffaa00','#ff5252','#b9ccb5','#00e55b','#fff'];
+    document.getElementById('class-dist').innerHTML = sorted.map(([cls,cnt], i) => `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px;font-size:14px">
+        <span style="width:120px;font-family:'Geist Mono',monospace;font-size:13px;color:var(--muted)">${cls}</span>
+        <div class="class-bar-bg"><div class="class-bar-fill" style="width:${(cnt/total*100).toFixed(1)}%;background:${barColors[i%barColors.length]};box-shadow:0 0 6px ${barColors[i%barColors.length]}80"></div></div>
+        <span style="width:40px;text-align:right;color:var(--text);font-family:'Geist Mono',monospace;font-weight:600">${cnt}</span>
       </div>`).join('');
 
   } catch(e) {
     alert('Erreur: ' + e.message);
   } finally {
-    btn.innerHTML = '🔬 Analyser';
+    btn.innerHTML = '<span style="font-size:18px">🔬</span> Analyser';
     btn.disabled  = false;
   }
 }
@@ -785,9 +1185,57 @@ function exportPDF() {
 }
 
 // ══════════════════════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+  // Ignore if typing in an input
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  
+  const navLinks = document.querySelectorAll('.nav-link');
+  switch(e.code) {
+    case 'Space':
+      e.preventDefault();
+      running ? stopMonitoring() : startMonitoring();
+      break;
+    case 'Digit1': case 'Numpad1':
+      switchTab('rt', navLinks[0]);
+      break;
+    case 'Digit2': case 'Numpad2':
+      switchTab('hist', navLinks[1]);
+      break;
+    case 'Digit3': case 'Numpad3':
+      switchTab('batch', navLinks[2]);
+      break;
+  }
+});
+
+// ══════════════════════════════════════════════════════════════
+//  CHART INTERACTION (zoom/pan on hover)
+// ══════════════════════════════════════════════════════════════
+document.addEventListener('mouseenter', (e) => {
+  const chartBox = e.target.closest('.chart-box');
+  if (!chartBox) return;
+  const plotDiv = chartBox.querySelector('[id^="sig-"],[id^="fft-chart-"],[id^="spec-"],[id^="mse-chart-"]');
+  if (plotDiv && plotDiv._fullLayout) {
+    Plotly.relayout(plotDiv, {'xaxis.fixedrange':false, 'yaxis.fixedrange':false});
+  }
+}, true);
+
+document.addEventListener('mouseleave', (e) => {
+  const chartBox = e.target.closest('.chart-box');
+  if (!chartBox) return;
+  const plotDiv = chartBox.querySelector('[id^="sig-"],[id^="fft-chart-"],[id^="spec-"],[id^="mse-chart-"]');
+  if (plotDiv && plotDiv._fullLayout) {
+    Plotly.relayout(plotDiv, {'xaxis.fixedrange':true, 'yaxis.fixedrange':true, 'xaxis.autorange':true, 'yaxis.autorange':true});
+  }
+}, true);
+
+// ══════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════
 buildCards();
+buildHealthBar();
+loadSettings();
 </script>
 </body>
 </html>
