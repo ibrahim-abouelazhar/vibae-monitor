@@ -26,7 +26,8 @@
       "Bash(uvicorn backend.main:app --port 8000)",
       "Bash(curl -s http://localhost:8000/openapi.json)",
       "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(sorted\\(d['paths'].keys\\(\\)\\)\\)\\)\")",
-      "Bash(curl -sv http://localhost:8000/health)"
+      "Bash(curl -sv http://localhost:8000/health)",
+      "Bash(pip show *)"
     ]
   }
 }
