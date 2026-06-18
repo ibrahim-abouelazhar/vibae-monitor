@@ -11,17 +11,8 @@ venv/
 .venv/
 env/
 
-# Modèles entraînés (binaires lourds — régénérer avec src/models/train.py)
-data/processed/*.pt
-data/processed/*.pkl
-!data/processed/threshold.json
-!data/processed/classifier_config.json
-
-# Dataset CWRU (.mat) et fichiers de données lourds
+# Dataset CWRU (fichiers Matlab — non versionnés)
 *.mat
-*.npz
-*.csv
-*.pth
 
 # Runtime
 data/*.db
