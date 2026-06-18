@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(run)",
+      "Skill(run:*)",
+      "Bash(python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(curl -s http://127.0.0.1:8000/files)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force -ErrorAction SilentlyContinue)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/predict/chunk -H 'Content-Type: application/json' -d '{\"samples\": [0.1, 0.2, 0.3], \"machine_id\": \"m1\"}')",
+      "Read(//tmp/**)",
+      "Bash(python -m http.server 8080)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8080/dashboard.html)",
+      "Bash(curl -s http://127.0.0.1:8080/dashboard.html)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(pip install *)",
+      "Bash(python -c \"from fpdf import FPDF; import matplotlib; print\\('OK'\\)\")",
+      "Bash(python -c \"from fpdf import FPDF; import matplotlib; print\\('fpdf2 OK / matplotlib', matplotlib.__version__\\)\")",
+      "Bash(python -m pip install fpdf2 --trusted-host pypi.org --trusted-host files.pythonhosted.org -q)",
+      "Bash(python -c \"from fpdf import FPDF; print\\('ok'\\)\")",
+      "Bash(python -c \"import matplotlib; print\\('matplotlib', matplotlib.__version__\\)\")",
+      "Bash(mkdir -p \"C:\\\\Users\\\\pc\\\\Documents\\\\Project_Vibae_Monitor\\\\.claude\")",
+      "mcp__Claude_Preview__preview_start",
+      "PowerShell(\\(Get-Item \"C:\\\\Users\\\\pc\\\\Documents\\\\Project_Vibae_Monitor\\\\data\\\\processed\\\\best_classifier.pt\"\\).Length / 1MB; Get-Content \"C:\\\\Users\\\\pc\\\\Documents\\\\Project_Vibae_Monitor\\\\data\\\\processed\\\\classifier_config.json\")",
+      "Bash(uvicorn backend.main:app --port 8000)",
+      "Bash(curl -s http://localhost:8000/openapi.json)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('\\\\n'.join\\(sorted\\(d['paths'].keys\\(\\)\\)\\)\\)\")",
+      "Bash(curl -sv http://localhost:8000/health)"
+    ]
+  }
+}

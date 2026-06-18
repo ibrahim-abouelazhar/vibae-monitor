@@ -1,0 +1,12 @@
+[theme]
+primaryColor = "#00FF66" # Neon green (Industrial healthy color / Accent)
+backgroundColor = "#0E1117" # Dark grey
+secondaryBackgroundColor = "#1F2635" # Slate blue-grey
+textColor = "#FFFFFF" # White
+font = "sans serif"
+
+[server]
+port = 8501
+headless = true
+enableCORS = false
+enableXsrfProtection = false
