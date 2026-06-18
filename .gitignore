@@ -13,3 +13,7 @@ mlruns/
 Thumbs.db
 # Claude Code local config
 .claude/
+
+# Outputs régénérables
+data/processed/
+models/*.pkl
