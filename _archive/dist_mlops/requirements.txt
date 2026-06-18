@@ -1,0 +1,5 @@
+kafka-python>=2.0.2
+streamlit>=1.20.0
+torch>=1.8.0
+scipy>=1.6.0
+plotly>=5.0.0

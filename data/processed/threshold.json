@@ -1,0 +1,11 @@
+{
+    "model_type": "cnn",
+    "window_size": 2048,
+    "step_size": 512,
+    "fs": 48000,
+    "height": 128,
+    "width": 32,
+    "mean_mse": 0.027595611289143562,
+    "std_mse": 0.0012412526411935687,
+    "threshold": 0.03131936863064766
+}

@@ -1,19 +1,75 @@
-data/raw/
-data/processed/
-data/features/
-models/*.pth
-models/*.pkl
+# ── Python ──────────────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
-.ipynb_checkpoints/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# ── Virtual environments ─────────────────────────────────────────────────────
 venv/
-.env
+.venv/
+env/
+ENV/
+
+# ── Trained model artifacts ──────────────────────────────────────────────────
+# Large binary files — regenerate with: python -m src.models.train
+data/processed/best_model.pt
+data/processed/best_classifier.pt
+data/processed/scaler.pkl
+data/processed/baseline_model.pkl
+
+# Keep config/threshold files (small, version-controlled)
+!data/processed/threshold.json
+!data/processed/classifier_config.json
+
+# ── Raw CWRU dataset (.mat files) ────────────────────────────────────────────
+# Large proprietary datasets — download separately (see README)
+_archive/data/raw/*.mat
+data/*.mat
+data/*.npz
+data/*.csv
+
+# ── Database (runtime, auto-created) ─────────────────────────────────────────
+data/*.db
+data/*.sqlite3
+
+# ── Temporary PDF/chart export files ─────────────────────────────────────────
+data/_tmp_*.png
+
+# ── Log files ────────────────────────────────────────────────────────────────
+*.log
+*.out.log
+*.err.log
+
+# ── MLflow ───────────────────────────────────────────────────────────────────
 mlruns/
+mlflow.db
+
+# ── PyTorch / Torch Hub cache ────────────────────────────────────────────────
+# (stored in user home, not project — but just in case)
+*.pth
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
 .DS_Store
 Thumbs.db
-# Claude Code local config
-.claude/
+desktop.ini
 
-# Outputs r�g�n�rables
-data/processed/
-models/*.pkl
+# ── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb
+
+# ── Environment variables ────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Claude Code internal ─────────────────────────────────────────────────────
+.claude/launch.json

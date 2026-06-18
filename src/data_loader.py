@@ -1,394 +1,224 @@
-"""
-Chargement et découpage en fenêtres des signaux CWRU.
-
-Pipeline :  fichier .mat  →  signal 1D  →  fenêtres glissantes  →  DataFrame
-           → split (normal/défauts)  →  normalisation  →  sauvegarde parquet
-"""
-from __future__ import annotations
-
-from pathlib import Path
-
-import joblib
+import os
+import pickle
 import numpy as np
-import pandas as pd
-import scipy.io
+import scipy.io as sio
+import scipy.signal as signal
+from scipy.stats import kurtosis, skew
 from sklearn.preprocessing import MinMaxScaler
-from tqdm import tqdm
 
-from src.config import (
-    DATA_PROCESSED,
-    DATA_RAW,
-    DEV_MODE,
-    DEV_SUBSET_SIZE,
-    MODELS_DIR,
-    OVERLAP,
-    RANDOM_SEED,
-    SAMPLING_RATE,
-    TRAIN_RATIO,
-    WINDOW_SIZE,
-)
+class VibrationPreprocessor:
+    def __init__(self, window_size=2048, step_size=512, fs=48000):  # FIXED P1 P2
+        self.window_size = window_size
+        self.step_size = step_size
+        self.fs = fs
+        self.scaler = MinMaxScaler()
+        self.is_fitted = False
 
-# Ordre de priorité utilisé en DEV_MODE pour garantir la diversité des labels
-_LABEL_PRIORITY = ["normal", "IR", "OR", "Ball"]
+    def load_de_signal(self, filepath):
+        """
+        Loads the Drive End (DE) vibration signal from a MATLAB (.mat) file.
+        """
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"File not found: {filepath}")
+        
+        mat = sio.loadmat(filepath)
+        de_keys = [k for k in mat.keys() if "DE_time" in k]
+        
+        if not de_keys:
+            raise ValueError(f"No Drive End (DE) data found in {filepath}. Available keys: {list(mat.keys())}")
+        
+        # Robust key matching
+        de_key = de_keys[0]
+        filename = os.path.basename(filepath)
+        for key in de_keys:
+            for token in filename.split("_"):
+                if token.isdigit() and token in key:
+                    de_key = key
+                    break
+        
+        signal_data = mat[de_key].flatten()
+        return signal_data
 
+    def segment_signal(self, signal_data):
+        """
+        Segments the 1D signal into sliding windows of length window_size.
+        """
+        windows = []
+        for i in range(0, len(signal_data) - self.window_size + 1, self.step_size):
+            windows.append(signal_data[i : i + self.window_size])
+        return np.array(windows)
 
-# ---------------------------------------------------------------------------
-# Fonction 1 : lecture d'un fichier .mat
-# ---------------------------------------------------------------------------
-
-
-def load_mat_file(filepath: Path) -> tuple[np.ndarray, int]:
-    """Lit un fichier .mat CWRU et retourne (signal_1D, sampling_rate).
-
-    Recherche la clé Drive End (pattern *_DE_time) et aplatit le tableau
-    en 1D si nécessaire. Suppose une fréquence d'échantillonnage de 12 kHz.
-    """
-    if not filepath.exists():
-        raise FileNotFoundError(f"Fichier introuvable : {filepath}")
-
-    mat_data = scipy.io.loadmat(str(filepath))
-
-    # Filtre les métadonnées internes scipy (__header__, __version__, etc.)
-    de_keys = [k for k in mat_data if not k.startswith("__") and k.endswith("_DE_time")]
-
-    if not de_keys:
-        clés_disponibles = [k for k in mat_data if not k.startswith("__")]
-        raise ValueError(
-            f"Aucune clé '*_DE_time' trouvée dans {filepath.name}.\n"
-            f"Clés disponibles : {clés_disponibles}"
+    def compute_stft(self, window):
+        """
+        Computes the STFT of a window.
+        Returns:
+            magnitude: np.ndarray of shape (128, 32) (sliced Nyquist bin)
+            Zxx: np.ndarray of shape (129, 32) (complex STFT)
+        """
+        # Hann window, size 256, overlap 199 (hop_size 57) keeps 2048 samples at 32 STFT frames.  # FIXED P2
+        f, t, Zxx = signal.stft(
+            window, 
+            fs=self.fs, 
+            window='hann', 
+            nperseg=256, 
+            noverlap=199,  # FIXED P2
+            boundary=None, 
+            padded=False
         )
+        magnitude = np.abs(Zxx)
+        if magnitude.shape != (129, 32):  # FIXED P2
+            raise ValueError(f"Expected STFT shape (129, 32), got {magnitude.shape}")  # FIXED P2
+        # Squeeze Nyquist bin out to make it exactly 128x32
+        magnitude_truncated = magnitude[:128, :]
+        return magnitude_truncated, Zxx
 
-    signal = mat_data[de_keys[0]]
-
-    # (N, 1) → (N,)  ou déjà (N,)
-    if signal.ndim > 1:
-        signal = signal.flatten()
-
-    return signal.astype(np.float32), SAMPLING_RATE
-
-
-# ---------------------------------------------------------------------------
-# Fonction 2 : détection du label depuis le nom de fichier
-# ---------------------------------------------------------------------------
-
-
-def detect_label(filename: str) -> str:
-    """Détecte le label de défaut depuis le préfixe du nom de fichier.
-
-    Règles : Normal→'normal', IR→'IR', OR→'OR', B<chiffre>→'Ball', sinon 'unknown'.
-    """
-    stem = Path(filename).stem  # supprime l'extension si présente
-
-    if stem.upper().startswith("NORMAL"):
-        return "normal"
-    if stem.upper().startswith("IR"):
-        return "IR"
-    if stem.upper().startswith("OR"):
-        return "OR"
-    # 'B' suivi d'un chiffre → Ball fault (ex: B007, B014, B021)
-    # Garde-fou : évite de matcher un nom commençant par 'Ball' ou autre mot
-    if stem.upper().startswith("B") and len(stem) > 1 and stem[1].isdigit():
-        return "Ball"
-
-    return "unknown"
-
-
-# ---------------------------------------------------------------------------
-# Fonction 3 : découpage en fenêtres glissantes (vectorisé)
-# ---------------------------------------------------------------------------
-
-
-def sliding_window(
-    signal: np.ndarray,
-    window_size: int = WINDOW_SIZE,
-    overlap: float = OVERLAP,
-) -> np.ndarray:
-    """Découpe un signal 1D en fenêtres avec recouvrement.
-
-    Retourne un array 2D de shape (n_windows, window_size).
-    La dernière fenêtre incomplète est ignorée.
-    """
-    step = int(window_size * (1.0 - overlap))  # ex : 1024 * 0.5 = 512
-
-    # sliding_window_view retourne une vue sans copie de mémoire : shape (L, window_size)
-    # L = nombre de positions de départ possibles (chaque point du signal)
-    view = np.lib.stride_tricks.sliding_window_view(signal, window_shape=window_size)
-
-    # On ne garde que les positions alignées sur le pas `step`
-    windows = view[::step]  # shape (n_windows, window_size)
-
-    return windows.copy()  # .copy() pour libérer la vue sur le signal original
-
-
-# ---------------------------------------------------------------------------
-# Fonction 4 : chargement de l'ensemble du dataset
-# ---------------------------------------------------------------------------
-
-
-def load_all_signals(data_dir: Path = DATA_RAW) -> pd.DataFrame:
-    """Charge tous les .mat, applique sliding window, retourne un DataFrame.
-
-    Colonnes : window_0 … window_<WINDOW_SIZE-1>, label, source_file.
-    En DEV_MODE, ne charge que DEV_SUBSET_SIZE fichiers avec diversité maximale.
-    """
-    mat_files = sorted(data_dir.glob("*.mat"))
-
-    if not mat_files:
-        raise FileNotFoundError(
-            f"Aucun fichier .mat dans {data_dir}.\n"
-            "Vérifiez que data/raw/ contient bien les fichiers CWRU."
+    def reconstruct_signal_from_stft(self, magnitude_128, original_stft):
+        """
+        Reconstructs the 1D physical scale signal from the 128-bin magnitude and the original complex STFT.
+        """
+        magnitude_129 = np.zeros((129, 32))
+        magnitude_129[:128, :] = magnitude_128
+        # Keep the original 129th bin magnitude
+        magnitude_129[128, :] = np.abs(original_stft[128, :])
+        
+        # Phase extraction
+        phase = np.angle(original_stft)
+        
+        # Combine magnitude and phase
+        recon_Zxx = magnitude_129 * np.exp(1j * phase)
+        
+        # Inverse STFT
+        _, recon_signal = signal.istft(
+            recon_Zxx, 
+            fs=self.fs, 
+            window='hann', 
+            nperseg=256, 
+            noverlap=199,  # FIXED P2
+            boundary=None
         )
+        if len(recon_signal) < self.window_size:  # FIXED P2
+            recon_signal = np.pad(recon_signal, (0, self.window_size - len(recon_signal)))  # FIXED P2
+        else:  # FIXED P2
+            recon_signal = recon_signal[:self.window_size]  # FIXED P2
+        return recon_signal
 
-    # --- Sélection DEV_MODE ---
-    if DEV_MODE:
-        mat_files = _select_dev_subset(mat_files, DEV_SUBSET_SIZE)
-        print(f"[DEV_MODE] {len(mat_files)} fichiers sélectionnés : {[f.name for f in mat_files]}")
+    def fit_scaler(self, normal_signal):
+        """
+        Fits the MinMaxScaler on the normal signal (segmented, converted to STFT magnitude, and flattened).
+        """
+        windows = self.segment_signal(normal_signal)
+        magnitudes = []
+        for w in windows:
+            mag, _ = self.compute_stft(w)
+            magnitudes.append(mag.flatten()) # shape: (4096,)
+            
+        self.scaler.fit(np.array(magnitudes))
+        self.is_fitted = True
 
-    # --- Boucle de chargement ---
-    colonnes_signal = [f"window_{i}" for i in range(WINDOW_SIZE)]
-    frames: list[pd.DataFrame] = []
+    def transform_magnitude(self, magnitude_128):
+        """
+        Normalizes a 128x32 magnitude spectrogram using the pre-fitted scaler.
+        """
+        if not self.is_fitted:
+            raise ValueError("Scaler is not fitted. Run fit_scaler first.")
+            
+        shape = magnitude_128.shape
+        # Flatten to 1D, scale, and reconstruct to 2D
+        if len(shape) == 2: # Single sample (128, 32)
+            flattened = magnitude_128.flatten().reshape(1, -1)
+            scaled = self.scaler.transform(flattened)
+            return scaled[0].reshape(shape)
+        else: # Batch of samples (N, 128, 32)
+            N = shape[0]
+            flattened = magnitude_128.reshape(N, -1)
+            scaled = self.scaler.transform(flattened)
+            return scaled.reshape(shape)
 
-    for mat_path in tqdm(mat_files, desc="Chargement des fichiers .mat", unit="fichier"):
-        try:
-            signal, _ = load_mat_file(mat_path)
-        except (FileNotFoundError, ValueError) as exc:
-            print(f"  [AVERTISSEMENT] {mat_path.name} ignoré : {exc}")
-            continue
+    def inverse_transform_magnitude(self, scaled_magnitude_128):
+        """
+        Converts the normalized magnitude spectrogram back to its physical scale.
+        """
+        if not self.is_fitted:
+            raise ValueError("Scaler is not fitted.")
+            
+        shape = scaled_magnitude_128.shape
+        if len(shape) == 2:
+            flattened = scaled_magnitude_128.flatten().reshape(1, -1)
+            unscaled = self.scaler.inverse_transform(flattened)
+            return unscaled[0].reshape(shape)
+        else:
+            N = shape[0]
+            flattened = scaled_magnitude_128.reshape(N, -1)
+            unscaled = self.scaler.inverse_transform(flattened)
+            return unscaled.reshape(shape)
 
-        label = detect_label(mat_path.name)
-        fenetres = sliding_window(signal)  # (n_windows, WINDOW_SIZE)
+    def save_scaler(self, filepath):
+        """
+        Saves the preprocessor and fitted scaler.
+        """
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "wb") as f:
+            pickle.dump({
+                "scaler": self.scaler,
+                "is_fitted": self.is_fitted,
+                "window_size": self.window_size,
+                "step_size": self.step_size,
+                "fs": self.fs
+            }, f)
 
-        df_fichier = pd.DataFrame(fenetres, columns=colonnes_signal)
-        df_fichier["label"] = label
-        df_fichier["source_file"] = mat_path.name
-        frames.append(df_fichier)
+    def load_scaler(self, filepath):
+        """
+        Loads the preprocessor configuration and scaler.
+        """
+        with open(filepath, "rb") as f:
+            data = pickle.load(f)
+            self.scaler = data["scaler"]
+            self.is_fitted = data["is_fitted"]
+            self.window_size = data.get("window_size", 2048)  # FIXED P2
+            self.step_size = data.get("step_size", 512)
+            self.fs = data.get("fs", 48000)  # FIXED P1
 
-    if not frames:
-        raise RuntimeError("Aucune fenêtre chargée — vérifiez le contenu de data/raw/.")
+    def extract_features(self, window):
+        """
+        Extracts temporal and frequency features from a raw 1D window.
+        """
+        # Temporal
+        rms = np.sqrt(np.mean(window ** 2))
+        kurt = kurtosis(window, fisher=False)
+        var = np.var(window)
 
-    df = pd.concat(frames, ignore_index=True)
+        # Additional features for baseline RF classifier
+        mx = float(np.max(window))
+        mn = float(np.min(window))
+        mean = float(np.mean(window))
+        sd = float(np.std(window))
+        skewness_val = float(skew(window))
+        abs_mean = np.mean(np.abs(window))
+        crest = float(np.max(np.abs(window)) / (rms + 1e-8))
+        form = float(rms / (abs_mean + 1e-8))
 
-    # --- Résumé ---
-    nb_fichiers = df["source_file"].nunique()
-    nb_fenetres = len(df)
-    repartition = df["label"].value_counts()
+        # Overall window FFT for plotting
+        fft_vals = np.fft.rfft(window)
+        fft_amps = np.abs(fft_vals)
+        fft_freqs = np.fft.rfftfreq(len(window), d=1.0/self.fs)
 
-    print(f"\n{'─' * 50}")
-    print(f"  Fichiers chargés   : {nb_fichiers}")
-    print(f"  Fenêtres totales   : {nb_fenetres:,}")
-    print(f"  Taille fenêtre     : {WINDOW_SIZE} pts  |  overlap : {OVERLAP:.0%}")
-    print(f"  Répartition par label :")
-    for label_name, count in repartition.items():
-        print(f"    {label_name:<10}  {count:>6,} fenêtres")
-    print(f"{'─' * 50}\n")
+        peak_idx = np.argmax(fft_amps)
+        peak_freq = fft_freqs[peak_idx]
+        spectral_energy = np.sum(fft_amps ** 2)
 
-    return df
-
-
-# ---------------------------------------------------------------------------
-# Helpers internes
-# ---------------------------------------------------------------------------
-
-
-def _select_dev_subset(mat_files: list[Path], n: int) -> list[Path]:
-    """Sélectionne n fichiers en priorisant la diversité des labels.
-
-    Prend 1 fichier par label présent (dans l'ordre _LABEL_PRIORITY),
-    puis complète jusqu'à n si besoin.
-    """
-    # Groupe les fichiers par label
-    par_label: dict[str, list[Path]] = {}
-    for f in mat_files:
-        lbl = detect_label(f.name)
-        par_label.setdefault(lbl, []).append(f)
-
-    selected: list[Path] = []
-
-    # 1 fichier par catégorie prioritaire d'abord
-    for lbl in _LABEL_PRIORITY:
-        if lbl in par_label and len(selected) < n:
-            selected.append(par_label[lbl][0])
-
-    # Complète si n > nombre de catégories
-    if len(selected) < n:
-        for f in mat_files:
-            if f not in selected:
-                selected.append(f)
-            if len(selected) >= n:
-                break
-
-    return selected[:n]
-
-
-# ---------------------------------------------------------------------------
-# Fonction 5 : split pour la détection d'anomalies non supervisée
-# ---------------------------------------------------------------------------
-
-
-def split_anomaly_detection(
-    df: pd.DataFrame,
-    train_ratio: float = TRAIN_RATIO,
-    seed: int = RANDOM_SEED,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Split spécifique à la détection d'anomalies non supervisée.
-
-    Train : train_ratio des fenêtres normales uniquement (l'autoencoder
-    apprend exclusivement la distribution saine).
-    Test  : les normales restantes + 100% des défauts, mélangés.
-    """
-    df_normal = df[df["label"] == "normal"].copy()
-    df_faults = df[df["label"] != "normal"].copy()
-
-    # Mélange reproductible des normales
-    df_normal = df_normal.sample(frac=1, random_state=seed).reset_index(drop=True)
-
-    n_train = int(len(df_normal) * train_ratio)
-    df_normal_train = df_normal.iloc[:n_train]
-    df_normal_test  = df_normal.iloc[n_train:]
-
-    df_train = df_normal_train.reset_index(drop=True)
-
-    # Test = normales restantes + tous les défauts, mélangés
-    df_test = (
-        pd.concat([df_normal_test, df_faults], ignore_index=True)
-        .sample(frac=1, random_state=seed)
-        .reset_index(drop=True)
-    )
-
-    # Garde-fou critique : le train ne doit JAMAIS contenir de défauts
-    assert (df_train["label"] == "normal").all(), (
-        "BUG: df_train contient des défauts !"
-    )
-
-    # Récap
-    print(f"\n[Split] Train : {len(df_train):,} fenêtres normales")
-    test_counts = df_test["label"].value_counts()
-    details = "  ".join(f"{lbl}={cnt:,}" for lbl, cnt in test_counts.items())
-    print(f"[Split] Test  : {len(df_test):,} fenêtres total  ({details})")
-
-    return df_train, df_test
-
-
-# ---------------------------------------------------------------------------
-# Fonction 6 : normalisation MinMaxScaler (anti data-leakage)
-# ---------------------------------------------------------------------------
-
-
-def normalize(
-    df: pd.DataFrame,
-    scaler: MinMaxScaler | None = None,
-) -> tuple[pd.DataFrame, MinMaxScaler]:
-    """Normalise les colonnes window_* avec MinMaxScaler dans [0, 1].
-
-    Si scaler est None : fit + transform (cas train).
-    Sinon : transform uniquement (cas test — évite le data leakage).
-    """
-    colonnes_signal = [col for col in df.columns if col.startswith("window_")]
-    colonnes_meta   = [col for col in df.columns if not col.startswith("window_")]
-
-    if scaler is None:
-        scaler = MinMaxScaler(feature_range=(0, 1))
-        valeurs_norm = scaler.fit_transform(df[colonnes_signal])
-    else:
-        valeurs_norm = scaler.transform(df[colonnes_signal])
-
-    df_norm = pd.DataFrame(valeurs_norm, columns=colonnes_signal, index=df.index)
-    # Réattache les colonnes méta (label, source_file) sans les toucher
-    df_norm[colonnes_meta] = df[colonnes_meta].values
-
-    return df_norm, scaler
-
-
-# ---------------------------------------------------------------------------
-# Fonction 7 : sauvegarde du pipeline préparé
-# ---------------------------------------------------------------------------
-
-
-def save_processed(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    scaler: MinMaxScaler,
-    output_dir: Path = DATA_PROCESSED,
-    models_dir: Path = MODELS_DIR,
-) -> None:
-    """Sauvegarde df_train, df_test (parquet) et scaler (joblib) sur disque."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    models_dir.mkdir(parents=True, exist_ok=True)
-
-    chemin_train  = output_dir  / "df_train.parquet"
-    chemin_test   = output_dir  / "df_test.parquet"
-    chemin_scaler = models_dir  / "scaler.pkl"
-
-    df_train.to_parquet(chemin_train,  index=False)
-    df_test.to_parquet(chemin_test,   index=False)
-    joblib.dump(scaler, chemin_scaler)
-
-    print("\n[Sauvegarde]")
-    for chemin in (chemin_train, chemin_test, chemin_scaler):
-        taille_mb = chemin.stat().st_size / (1024 ** 2)
-        print(f"  {chemin.resolve()}  ({taille_mb:.2f} MB)")
-
-
-# ---------------------------------------------------------------------------
-# Fonction 8 : rechargement du pipeline (pour P3 — entraînement)
-# ---------------------------------------------------------------------------
-
-
-def load_processed(
-    processed_dir: Path = DATA_PROCESSED,
-    models_dir: Path = MODELS_DIR,
-) -> tuple[pd.DataFrame, pd.DataFrame, MinMaxScaler]:
-    """Recharge df_train, df_test et scaler depuis disque.
-
-    Lève FileNotFoundError si un fichier est absent — relancer
-    `python -m src.data_loader` pour régénérer les fichiers.
-    """
-    chemins = {
-        "df_train" : processed_dir / "df_train.parquet",
-        "df_test"  : processed_dir / "df_test.parquet",
-        "scaler"   : models_dir    / "scaler.pkl",
-    }
-
-    for nom, chemin in chemins.items():
-        if not chemin.exists():
-            raise FileNotFoundError(
-                f"Fichier manquant : {chemin}\n"
-                f"Relancez le pipeline : python -m src.data_loader"
-            )
-
-    df_train = pd.read_parquet(chemins["df_train"])
-    df_test  = pd.read_parquet(chemins["df_test"])
-    scaler   = joblib.load(chemins["scaler"])
-
-    print(f"[load_processed] df_train={df_train.shape}  df_test={df_test.shape}  scaler chargé")
-    return df_train, df_test, scaler
-
-
-# ---------------------------------------------------------------------------
-# Point d'entrée direct — pipeline complet bout en bout
-# ---------------------------------------------------------------------------
-
-
-if __name__ == "__main__":
-    print("=" * 60)
-    print("Pipeline data_loader vibae-monitor")
-    print("=" * 60)
-
-    # 1. Chargement
-    df = load_all_signals()
-
-    # 2. Split AVANT normalisation (anti data-leakage)
-    df_train, df_test = split_anomaly_detection(df)
-
-    # 3. Normalisation : fit sur train, transform sur test
-    df_train, scaler = normalize(df_train)
-    df_test, _       = normalize(df_test, scaler=scaler)
-
-    # 4. Sauvegarde
-    save_processed(df_train, df_test, scaler)
-
-    print("\n[OK] Pipeline termine. Les fichiers suivants sont prets :")
-    print("  data/processed/df_train.parquet")
-    print("  data/processed/df_test.parquet")
-    print("  models/scaler.pkl")
-    print("\nP3 (ML) peut maintenant utiliser load_processed() pour entrainer l'autoencoder.")
+        return {
+            "rms": float(rms),
+            "kurtosis": float(kurt),
+            "variance": float(var),
+            "max": mx,
+            "min": mn,
+            "mean": mean,
+            "sd": sd,
+            "skewness": skewness_val,
+            "crest": crest,
+            "form": form,
+            "peak_frequency": float(peak_freq),
+            "spectral_energy": float(spectral_energy),
+            "fft_amps": fft_amps.tolist(),
+            "fft_freqs": fft_freqs.tolist()
+        }
