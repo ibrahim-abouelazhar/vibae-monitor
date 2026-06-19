@@ -7,7 +7,7 @@ from scipy.stats import kurtosis, skew
 from sklearn.preprocessing import MinMaxScaler
 
 class VibrationPreprocessor:
-    def __init__(self, window_size=2048, step_size=512, fs=48000):  # FIXED P1 P2
+    def __init__(self, window_size=2048, step_size=512, fs=48000):
         self.window_size = window_size
         self.step_size = step_size
         self.fs = fs
@@ -55,19 +55,19 @@ class VibrationPreprocessor:
             magnitude: np.ndarray of shape (128, 32) (sliced Nyquist bin)
             Zxx: np.ndarray of shape (129, 32) (complex STFT)
         """
-        # Hann window, size 256, overlap 199 (hop_size 57) keeps 2048 samples at 32 STFT frames.  # FIXED P2
+        # Hann window, size 256, overlap 199 (hop_size 57) keeps 2048 samples at 32 STFT frames.
         f, t, Zxx = signal.stft(
             window, 
             fs=self.fs, 
             window='hann', 
             nperseg=256, 
-            noverlap=199,  # FIXED P2
+            noverlap=199,
             boundary=None, 
             padded=False
         )
         magnitude = np.abs(Zxx)
-        if magnitude.shape != (129, 32):  # FIXED P2
-            raise ValueError(f"Expected STFT shape (129, 32), got {magnitude.shape}")  # FIXED P2
+        if magnitude.shape != (129, 32):
+            raise ValueError(f"Expected STFT shape (129, 32), got {magnitude.shape}")
         # Squeeze Nyquist bin out to make it exactly 128x32
         magnitude_truncated = magnitude[:128, :]
         return magnitude_truncated, Zxx
@@ -93,13 +93,13 @@ class VibrationPreprocessor:
             fs=self.fs, 
             window='hann', 
             nperseg=256, 
-            noverlap=199,  # FIXED P2
+            noverlap=199,
             boundary=None
         )
-        if len(recon_signal) < self.window_size:  # FIXED P2
-            recon_signal = np.pad(recon_signal, (0, self.window_size - len(recon_signal)))  # FIXED P2
-        else:  # FIXED P2
-            recon_signal = recon_signal[:self.window_size]  # FIXED P2
+        if len(recon_signal) < self.window_size:
+            recon_signal = np.pad(recon_signal, (0, self.window_size - len(recon_signal)))
+        else:
+            recon_signal = recon_signal[:self.window_size]
         return recon_signal
 
     def fit_scaler(self, normal_signal):
@@ -174,9 +174,9 @@ class VibrationPreprocessor:
             data = pickle.load(f)
             self.scaler = data["scaler"]
             self.is_fitted = data["is_fitted"]
-            self.window_size = data.get("window_size", 2048)  # FIXED P2
+            self.window_size = data.get("window_size", 2048)
             self.step_size = data.get("step_size", 512)
-            self.fs = data.get("fs", 48000)  # FIXED P1
+            self.fs = data.get("fs", 48000)
 
     def extract_features(self, window):
         """
