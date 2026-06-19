@@ -41,8 +41,8 @@ class VibrationDataset(Dataset):
 
 class SpectrogramDataset(Dataset):
     def __init__(self, data, labels, label_map=LABEL_TO_IDX, augment=False, noise_factor=0.03):
-        if data.ndim == 3 and data.shape[1:] == (128, 32):  # FIXED P6
-            data = data[:, :32, :]  # FIXED P6
+        if data.ndim == 3 and data.shape[1:] == (128, 32):
+            data = data[:, :32, :]
         # Input shape: (n_samples, 32, 32)
         # Add channel dimension -> (n_samples, 1, 32, 32)
         self.data = torch.tensor(data, dtype=torch.float32).unsqueeze(1)
@@ -89,9 +89,9 @@ def train_model(
     epochs=40,
     batch_size=64,
     learning_rate=0.001,
-    window_size=2048,  # FIXED P2
+    window_size=2048,
     step_size=512,
-    fs=48000,  # FIXED P1
+    fs=48000,
     device=None,
     patience=5,
     augment=True,
@@ -104,7 +104,7 @@ def train_model(
     os.makedirs(processed_dir, exist_ok=True)
 
     # 1. Load normal vibration data
-    preprocessor = VibrationPreprocessor(window_size=window_size, step_size=step_size, fs=fs)  # FIXED P1 P2
+    preprocessor = VibrationPreprocessor(window_size=window_size, step_size=step_size, fs=fs)
     normal_signal = preprocessor.load_de_signal(normal_mat_path)
     windows = preprocessor.segment_signal(normal_signal)
     

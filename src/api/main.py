@@ -8,9 +8,9 @@ from pydantic import BaseModel
 from typing import Optional
 
 from src.models.classifier import get_classifier
-from src import model_service  # FIXED P3
+from src import model_service
 from src.data_loader import VibrationPreprocessor
-from src.inference import run_inference  # FIXED P4
+from src.inference import run_inference
 from backend.routers.live import router as live_router
 from backend.routers.chunk import router as chunk_router
 from backend.routers.stream import router as stream_router
@@ -27,9 +27,9 @@ app.add_middleware(
 )
 
 # Global resource paths
-MODEL_PATH = model_service.MODEL_PATH  # FIXED P3
-SCALER_PATH = model_service.SCALER_PATH  # FIXED P3
-THRESHOLD_PATH = model_service.THRESHOLD_PATH  # FIXED P3
+MODEL_PATH = model_service.MODEL_PATH
+SCALER_PATH = model_service.SCALER_PATH
+THRESHOLD_PATH = model_service.THRESHOLD_PATH
 CLASSIFIER_PATH = "data/processed/best_classifier.pt"
 CLASSIFIER_CONFIG_PATH = "data/processed/classifier_config.json"
 BASELINE_PATH = "data/processed/baseline_model.pkl"
@@ -59,11 +59,11 @@ class AnalysisResponse(BaseModel):
 
 def load_resources():
     global model, preprocessor, threshold_config, classifier_model, classifier_config, baseline_model
-    if not model_service.load_resources():  # FIXED P3
+    if not model_service.load_resources():
         return False
     
     try:
-        model, preprocessor, threshold_config = model_service.get_resources()  # FIXED P3
+        model, preprocessor, threshold_config = model_service.get_resources()
         
         # Load Classifier (if trained)
         if os.path.exists(CLASSIFIER_PATH) and os.path.exists(CLASSIFIER_CONFIG_PATH):
@@ -80,7 +80,7 @@ def load_resources():
         # Load Baseline RF model (if trained)
         if os.path.exists(BASELINE_PATH):
             with open(BASELINE_PATH, "rb") as f:
-                import pickle  # FIXED P3
+                import pickle
                 baseline_model = pickle.load(f)
             print("Baseline model loaded successfully.")
         else:
@@ -178,7 +178,7 @@ def get_file_windows(filename: str, limit: int = 300):
     if not os.path.exists(filepath):
         raise HTTPException(status_code=404, detail=f"File {filename} not found.")
         
-    proc = preprocessor if preprocessor is not None else VibrationPreprocessor(window_size=2048, fs=48000)  # FIXED P1 P2
+    proc = preprocessor if preprocessor is not None else VibrationPreprocessor(window_size=2048, fs=48000)
     
     try:
         signal_data = proc.load_de_signal(filepath)
@@ -216,22 +216,22 @@ def analyze_window(request: AnalysisRequest):
     raw_arr = np.array(raw_window)
     print(f"[DEBUG /analyze] len={len(raw_arr)}, min={raw_arr.min():.6f}, max={raw_arr.max():.6f}, mean={raw_arr.mean():.6f}, std={raw_arr.std():.6f}", flush=True)
     
-    result = run_inference(preprocessor, model, threshold_config, raw_arr)  # FIXED P4
-    magnitude_128 = result["spectrogram"]  # FIXED P4
-    features = result["features"]  # FIXED P4
-    mse = result["mse"]  # FIXED P4
+    result = run_inference(preprocessor, model, threshold_config, raw_arr)
+    magnitude_128 = result["spectrogram"]
+    features = result["features"]
+    mse = result["mse"]
     
     # Anomaly threshold check
     active_threshold = request.threshold_override if request.threshold_override is not None else threshold_config["threshold"]
     status = "ANOMALIE" if mse > active_threshold else "NORMAL"
     
-    recon_magnitude_128 = result["recon_spectrogram"]  # FIXED P4
-    reconstructed_1d = result["signal_reconstructed"]  # FIXED P4
+    recon_magnitude_128 = result["recon_spectrogram"]
+    reconstructed_1d = result["signal_reconstructed"]
     
     # 8. CNN Classifier Inference (Multi-class Diagnostics)
     fault_class = "Inconnue"
     if classifier_model is not None:
-        tensor_32 = result["tensor_x"][:, :, :32, :]  # FIXED P6
+        tensor_32 = result["tensor_x"][:, :, :32, :]
         # Local min-max scaling
         t_min = tensor_32.min()
         t_max = tensor_32.max()

@@ -35,4 +35,4 @@ Thumbs.db
 !.env.example
 
 # Claude Code
-.claude/launch.json
+.claude/
