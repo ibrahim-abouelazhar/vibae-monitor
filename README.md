@@ -59,23 +59,7 @@ Projet basé sur le **CWRU Bearing Dataset** (Case Western Reserve University) :
 - Accéléromètre Drive End (DE_time)
 - 10 classes : Normal + 3 types × 3 sévérités (Ball, Inner Race, Outer Race)
 
-> Les fichiers `.mat` ne sont pas inclus dans ce dépôt. Télécharger depuis :
-> https://engineering.case.edu/bearingdatacenter/download-data-file
-
-Placer les fichiers dans `_archive/data/raw/` :
-
-| Fichier | Classe |
-|---|---|
-| `Time_Normal_1_098.mat` | Normal |
-| `B007_1_123.mat` | Ball 0.007" |
-| `B014_1_190.mat` | Ball 0.014" |
-| `B021_1_227.mat` | Ball 0.021" |
-| `IR007_1_110.mat` | Inner Race 0.007" |
-| `IR014_1_175.mat` | Inner Race 0.014" |
-| `IR021_1_214.mat` | Inner Race 0.021" |
-| `OR007_6_1_136.mat` | Outer Race 0.007" |
-| `OR014_6_1_202.mat` | Outer Race 0.014" |
-| `OR021_6_1_239.mat` | Outer Race 0.021" |
+Les 10 fichiers `.mat` sont **inclus dans le dépôt** dans `_archive/data/raw/` — aucun téléchargement nécessaire.
 
 ---
 
@@ -99,7 +83,7 @@ pip install -r requirements.txt
 
 ## Entraînement des modèles
 
-Les fichiers `.mat` CWRU doivent être présents dans `_archive/data/raw/`.
+Les modèles entraînés sont inclus dans le dépôt (`data/processed/`). Pour les régénérer :
 
 ```bash
 # 1. Autoencodeur (détection anomalie) — ~30 min CPU
