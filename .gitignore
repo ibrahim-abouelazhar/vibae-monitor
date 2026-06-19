@@ -11,8 +11,6 @@ venv/
 .venv/
 env/
 
-# Dataset CWRU (fichiers Matlab — non versionnés)
-*.mat
 
 # Runtime
 data/*.db
